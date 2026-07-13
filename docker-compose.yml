@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: career-pilot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-career_pilot}
+      POSTGRES_USER: ${DB_USERNAME:-career_pilot}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?err}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-career_pilot} -d ${DB_NAME:-career_pilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: career-pilot-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./career-pilot-backend
+      dockerfile: Dockerfile
+    container_name: career-pilot-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-career_pilot}
+      DB_USERNAME: ${DB_USERNAME:-career_pilot}
+      DB_PASSWORD: ${DB_PASSWORD:?err}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?err}
+      JWT_TIME: ${JWT_TIME:-3600000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?err}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?err}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?err}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?err}
+      MAIL_USERNAME: ${MAIL_USERNAME:?err}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?err}
+      URI_APP: ${URI_APP:-http://localhost:5173}
+      REDIRECT_URI_BASE: ${REDIRECT_URI_BASE:-http://localhost:8080}
+      OTP_PROVIDER: ${OTP_PROVIDER:-simulated}
+      WIREWEB_API_KEY: ${WIREWEB_API_KEY:-}
+      WIREWEB_SESSION_ID: ${WIREWEB_SESSION_ID:-}
+      WIREWEB_BASE_URL: ${WIREWEB_BASE_URL:-https://app.wireweb.co.in}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
