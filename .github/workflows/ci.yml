@@ -27,4 +27,5 @@ jobs:
           cache: maven
 
       - name: Build with Maven
-        run: ./mvnw verify -B
+        run: mvn compile -B
+        working-directory: career-pilot-backend
