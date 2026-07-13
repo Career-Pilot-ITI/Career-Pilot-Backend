@@ -23,6 +23,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.function.Supplier;
 
 @Aspect
 @Component
@@ -48,11 +49,9 @@ public class RateLimitAspect {
                 .refillGreedy(rateLimit.refillTokens(), Duration.ofSeconds(rateLimit.refillSeconds()))
                 .build();
 
-        BucketConfiguration config = BucketConfiguration.builder()
-                .addLimit(limit)
-                .build();
 
-        Bucket bucket = proxyManager.builder().build(bucketId, config);
+        Supplier<BucketConfiguration> configSupplier = ()-> BucketConfiguration.builder().addLimit(limit).build();
+        Bucket bucket = proxyManager.builder().build(bucketId, configSupplier);
 
         if (!bucket.tryConsume(1)) {
             throw new RateLimitExceededException("Rate limit exceeded. Try again later.");

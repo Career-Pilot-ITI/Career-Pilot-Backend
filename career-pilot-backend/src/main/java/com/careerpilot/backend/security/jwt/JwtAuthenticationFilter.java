@@ -2,7 +2,6 @@ package com.careerpilot.backend.security.jwt;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.SignatureException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,7 +35,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String jwt = authHeader.substring(7);
-            String userEmail = null;
+            String userEmail;
 
             try {
                 userEmail = jwtService.extractUsername(jwt);
@@ -47,11 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 logger.warn("Expired JWT token");
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token expirado");
                 return;
-            } catch (SignatureException e) {
-                logger.error("Invalid JWT signature");
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token signature");
-                return;
-            } catch (Exception e) {
+            }catch (Exception e) {
                 logger.error("Error processing the JWT token: {}", e.getMessage());
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Error al procesar el token");
                 return;
