@@ -1,0 +1,26 @@
+package com.careerpilot.backend.security.jwt;
+
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class TokenBlacklistService {
+  private static final String BLACKLIST_PREFIX = "blacklist:";
+
+  private final RedisTemplate<String, String> redisTemplate;
+
+  public TokenBlacklistService(RedisTemplate<String, String> redisTemplate) {
+    this.redisTemplate = redisTemplate;
+  }
+
+  public void blacklistToken(String token, long ttlInMillis) {
+    redisTemplate.opsForValue()
+        .set(BLACKLIST_PREFIX + token, "blacklisted", ttlInMillis, TimeUnit.MILLISECONDS);
+  }
+
+  public boolean isTokenBlacklisted(String token) {
+    return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + token));
+  }
+}
