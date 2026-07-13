@@ -1,196 +1,151 @@
+# Career Pilot Backend
 
----
+A Spring Boot backend for the Career Pilot platform — handles auth, rate limiting, and WhatsApp OTP delivery.
 
-# Authentication with Spring Security
+## What's inside
 
-This project demonstrates how to implement an authentication system using **Spring Security** with **JWT** token-based authentication, **OAuth2** authentication via Google and GitHub, and email functionalities using **Spring Boot**. It integrates with a **MySQL** database for user management and allows users to register, log in, verify their email, and reset their password.
+- **JWT auth** — login, register, refresh tokens, logout
+- **Phone OTP** — verify your number via WhatsApp (WireWeb) or simulated console logging
+- **Email verification** — old-school email code verification + password reset
+- **Rate limiting** — Bucket4j on Redis, protects your endpoints from abuse
+- **Refresh tokens** — stored in Redis, rotated on use, revoked on logout
+- **PostgreSQL** — Flyway migrations, no auto-DDL in production
+- **Docker** — everything runs in containers
 
----
+## Quick start
 
-## Project Overview
+### 1. Clone and enter
 
-This application provides a secure authentication system with support for **username/password login**, **email verification**, **password reset**, **JWT-based authentication**, and **OAuth2 login**. The system supports **Google** and **GitHub** OAuth2 integrations and uses **MySQL** as the backend database.
+```bash
+git clone git@github.com:Career-Pilot-ITI/Career-Pilot-Backend.git
+cd Career-Pilot-Backend
+```
 
-Key features include:
-- **User Registration** with email verification.
-- **OAuth2 Authentication** with Google and GitHub login.
-- **Password Reset** functionality.
-- **JWT Authentication** for stateless login.
-- **Email Services** to handle password reset and account verification.
+### 2. Set up environment
 
----
+Copy the example env and fill in the blanks:
 
-## Tech Stack
+```bash
+cp .env.example .env
+```
 
-- **Java 17**
-- **Spring Boot 3.x**
-    - **Spring Security** for managing user authentication and authorization.
-    - **Spring Data JPA** for database interactions.
-    - **Spring Boot Starter Mail** for sending emails (password reset and verification).
-    - **Spring Boot Starter OAuth2 Client** for OAuth2-based login.
-    - **JWT (JSON Web Token)** for token-based authentication.
-- **MySQL** for the database.
-- **Lombok** for reducing boilerplate code.
-- **JUnit** for unit and integration testing.
+Minimal `.env` to get running (no email, no OAuth):
 
----
+```env
+DB_PASSWORD=changeme
+JWT_SECRET=JfDznjRadS1ckJhWUKVy2KPCvLEUyrpNPYAW7cZAwDw=
+OTP_PROVIDER=simulated
+```
 
-## Features
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `DB_PASSWORD` | ✅ | — | PostgreSQL password |
+| `JWT_SECRET` | ✅ | — | 256-bit Base64 key for signing JWTs |
+| `JWT_TIME` | ❌ | `3600000` (1h) | Token expiry in ms |
+| `OTP_PROVIDER` | ❌ | `simulated` | `simulated` (logs to console) or `wireweb` |
+| `REDIS_PASSWORD` | ❌ | empty | Redis password |
+| `MAIL_USERNAME` | ❌ | — | Gmail SMTP (for email verification) |
+| `MAIL_PASSWORD` | ❌ | — | Gmail app password |
 
-- **User Registration**: Users can register with an email, username, and password.
-- **Email Verification**: A verification code is sent to the user's email to confirm their account.
-- **Password Reset**: Users can request a password reset email and reset their password using the code.
-- **JWT Authentication**: Secure API endpoints using JWT tokens.
-- **OAuth2 Login**: Supports login via **Google** and **GitHub**.
-- **Logout**: Users can logout, invalidating the session and JWT token.
+### 3. Start everything
 
----
+```bash
+docker compose up --build
+```
 
-## Prerequisites
+This starts:
+- **PostgreSQL 15** on port `5433`
+- **Redis 7** on port `6379`
+- **Backend** on port `8080`
 
-Ensure the following are installed and set up:
+Wait a few seconds for the backend to pass its health check, then:
 
-- **JDK 17** for compiling and running the project.
-- **Maven** for dependency management and building the project.
-- **MySQL** or a compatible database for storing user data.
-- **Google OAuth2 credentials** and **GitHub OAuth2 credentials** for integrating social login.
-- **Gmail SMTP credentials** for sending verification and reset emails.
+```bash
+curl http://localhost:8080/actuator/health
+# → {"status":"UP"}
+```
 
----
+Swagger UI: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 
-## Setup and Installation
+## Testing the OTP flow (simulated)
 
-1. **Clone the repository**:
-   ```
-   git clone https://github.com/Gutierrez-16/authentication-with-spring-security.git
-   cd authentication-with-spring-security
-   ```
+No WhatsApp needed. OTPs print to the container logs.
 
-2. **Set up the database**:
-    - Create a MySQL database named `auth_db` or any other name you prefer.
-    - Update the database connection properties in `application.yml` (see the [Configuration](#configuration) section below).
+```bash
+# 1. Send OTP
+curl -X POST http://localhost:8080/api/v1/auth/send-otp \
+  -H "Content-Type: application/json" \
+  -d '{"phoneNumber": "+201234567890"}'
 
-3. **Configure the application properties**:
-   Open `src/main/resources/application.yml` and update the following sections:
+# 2. Grab the code from logs
+docker compose logs backend | grep "OTP for"
 
-   ```yaml
-   spring:
-     jackson:
-       time-zone: America/Lima
-     datasource:
-       url: ${DB_BASEDEDATOS}
-       username: ${DB_USERNAME}
-       password: ${DB_PASSWORD}
-       driver-class-name: com.mysql.cj.jdbc.Driver
-     jpa:
-       hibernate:
-         ddl-auto: update
-       show-sql: true
-     mail:
-       host: smtp.gmail.com
-       port: 587
-       username: ${MAIL_USERNAME}
-       password: ${MAIL_PASSWORD}
-       properties:
-         mail.smtp.auth: true
-         mail.smtp.starttls.enable: true
+# 3. Verify (auto-registers if new number)
+curl -X POST http://localhost:8080/api/v1/auth/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{"phoneNumber": "+201234567890", "code": "482916"}'
+```
 
-   security:
-     jwt:
-       secret-key: ${JWT_SECRET}
-       expiration-time: ${JWT_TIME}
-     oauth2:
-       client:
-         registration:
-           google:
-             client-id: ${GOOGLE_CLIENT_ID}
-             client-secret: ${GOOGLE_CLIENT_SECRET}
-             scope: profile, email, openid
-             client-name: Google
-           github:
-             client-id: ${GITHUB_CLIENT_ID}
-             client-secret: ${GITHUB_CLIENT_SECRET}
-             scope: read:user, user:email
-             client-name: GitHub
-       provider:
-         google:
-           issuer-uri: https://accounts.google.com
-           jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
-           authorization-uri: https://accounts.google.com/o/oauth2/auth
-           token-uri: https://oauth2.googleapis.com/token
-           user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
-           user-name-attribute: sub
-         github:
-           authorization-uri: https://github.com/login/oauth/authorize
-           token-uri: https://github.com/login/oauth/access_token
-           user-info-uri: https://api.github.com/user
-           user-name-attribute: login
-     redirect-uri-base: ${REDIRECT_URI_BASE}
+Response comes back with a JWT:
 
-   app:
-     redirect:
-       uri:
-         app: ${URI_APP}
-   ```
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "expiresIn": 3600000,
+  "refreshToken": "cdf98f59-2053-4817-82b5-6086b07bd8df"
+}
+```
 
-   Replace placeholders like `${DB_BASEDEDATOS}`, `${MAIL_USERNAME}`, `${JWT_SECRET}`, etc., with your actual values.
+### Rate limiting
 
----
+`/send-otp` is limited to **3 requests per phone number per minute**. Hit the limit and you get:
 
-## Configuration
+```json
+{
+  "message": "You have exceeded the rate limit. Please try again later."
+}
+```
 
-- **Database Configuration**: Make sure to set up a MySQL database for user data and update the `spring.datasource.url`, `spring.datasource.username`, and `spring.datasource.password` properties in the `application.yml` file.
+Status: **429 Too Many Requests**
 
-- **Email Configuration**: The application uses **Gmail SMTP** for sending emails. You will need to set up a **Gmail account** and use it for the `MAIL_USERNAME` and `MAIL_PASSWORD`.
+## API endpoints
 
-- **JWT Configuration**: Set the `JWT_SECRET` and `JWT_TIME` properties to secure your JWT token and define its expiration time.
+| Method | Path | Auth | What it does |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/login` | No | Login with email/phone/username + password |
+| `POST` | `/api/v1/auth/register` | No | Register with email, phone, username, password |
+| `PUT` | `/api/v1/auth/verify` | No | Verify email with code |
+| `GET` | `/api/v1/auth/resend-code` | No | Resend verification email |
+| `GET` | `/api/v1/auth/reset-password-request` | No | Request password reset email |
+| `PUT` | `/api/v1/auth/reset-password` | No | Reset password with code |
+| `POST` | `/api/v1/auth/refresh` | No | Exchange refresh token for new JWT |
+| `POST` | `/api/v1/auth/logout` | Bearer | Blacklist token + revoke refresh tokens |
+| `POST` | `/api/v1/auth/send-otp` | No | Send OTP to phone (rate-limited) |
+| `POST` | `/api/v1/auth/verify-otp` | No | Verify OTP → login or auto-register |
 
-- **OAuth2 Credentials**: You'll need to set up OAuth2 credentials for **Google** and **GitHub** by registering your application in their respective developer consoles and adding the **client ID** and **client secret** in the configuration.
+## WhatsApp OTP (WireWeb)
 
----
+Want real WhatsApp messages instead of console logs?
 
-## API Endpoints
+1. Go to [app.wireweb.co.in](https://app.wireweb.co.in)
+2. Scan the QR with your phone (WhatsApp → Linked Devices)
+3. Copy your **API key** and **session ID**
+4. Set in `.env`:
 
-### Authentication Endpoints
+```env
+OTP_PROVIDER=wireweb
+WIREWEB_API_KEY=wire_your_api_key_here
+WIREWEB_SESSION_ID=ws_your_session_id_here
+```
 
-- **POST /api/v1/auth/login**
-    - **Request Body**: `{ "username": "user", "password": "password123" }`
-    - **Response**: JWT token upon successful authentication.
+5. Rebuild and restart:
 
-- **POST /api/v1/auth/register**
-    - **Request Body**: `{ "email": "user@example.com", "username": "user", "password": "password123" }`
-    - **Response**: A success message and instructions for email verification.
+```bash
+docker compose build backend && docker compose up -d backend
+```
 
-- **POST /api/v1/auth/verify**
-    - **Request Body**: `{ "email": "user@example.com", "verificationCode": "123456" }`
-    - **Response**: Success message indicating the account was verified.
+Now every OTP sends as a WhatsApp message.
 
-- **POST /api/v1/auth/reset-password-request**
-    - **Request Body**: `{ "email": "user@example.com" }`
-    - **Response**: Success message indicating a reset email was sent.
+## About
 
-- **POST /api/v1/auth/reset-password**
-    - **Request Body**: `{ "email": "user@example.com", "verificationCode": "123456", "newPassword": "newpassword123" }`
-    - **Response**: Success message confirming the password has been reset.
-
-- **POST /api/v1/auth/logout**
-    - **Request Header**: `Authorization: Bearer <token>`
-    - **Response**: A success message confirming the user has logged out.
-
-- **GET /api/v1/auth/oauth-login**
-    - **Description**: OAuth2 login via Google or GitHub.
-    - **Response**: Redirects to your application with a JWT token after successful login.
-
----
-
-## Contributing
-
-If you'd like to contribute, please follow these steps:
-
-1. Fork the repository.
-2. Create a new branch: `git checkout -b feature-name`.
-3. Commit your changes: `git commit -am 'Add new feature'`.
-4. Push to the branch: `git push origin feature-name`.
-5. Submit a pull request.
-
----
+Built with Java 17 + Spring Boot 3.4, PostgreSQL 15, Redis 7, and Flyway. Runs in Docker.
