@@ -1,6 +1,7 @@
 package com.careerpilot.backend.entity;
 
 import com.careerpilot.backend.entity.ENUMs.DocType;
+import com.pgvector.PGvector;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -27,8 +28,8 @@ public class RagContextDocument {
     @Column(name = "metadata", columnDefinition = "TEXT")
     private String metadata;
 
-    @Column(name = "vector")
-    private String vector;
+    @Column(name = "vector", columnDefinition = "vector(1536)")
+    private PGvector vector;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
