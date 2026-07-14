@@ -44,14 +44,29 @@ public class PaymentTransaction {
     @Column(name = "payment_method")
     private String paymentMethod;     // "PAYMOB", "STOREKIT"
 
-    @Column(name = "paymob_transaction_id")
-    private String paymobTransactionId;
+    @Column(name = "provider_transaction_id")
+    private String providerTransactionId;
+
+    @Column(name = "merchant_order_id", unique = true)
+    private String merchantOrderId;
+
+    @Column(name = "provider")
+    private String provider;
+
+    @Column(name = "failure_reason", length = 500)
+    private String failureReason;
+
+    @Column(name = "raw_webhook_payload", columnDefinition = "TEXT")
+    private String rawWebhookPayload;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "confirmed_at")
     private LocalDateTime confirmedAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }
 
 
