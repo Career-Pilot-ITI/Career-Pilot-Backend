@@ -12,6 +12,15 @@ spring:
     password: ${DB_PASSWORD:career_pilot}
     driver-class-name: org.postgresql.Driver
 
+  paymob:
+    base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com}
+    secret-key: ${PAYMOB_SECRET_KEY}
+    public-key: ${PAYMOB_PUBLIC_KEY}
+    hmac-secret: ${PAYMOB_HMAC_SECRET}
+    notification-url: ${PAYMOB_NOTIFICATION_URL}
+    redirection-url: ${PAYMOB_REDIRECTION_URL:http://localhost:5173/payment/result}
+    integration-ids:
+      card: ${PAYMOB_INTEGRATION_ID_CARD}
   jpa:
     hibernate:
       ddl-auto: validate
