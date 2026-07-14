@@ -125,7 +125,7 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/complete-registration")
+    @PatchMapping("/complete-registration")
     public ResponseEntity<ApiResponse> completeRegistration(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody CompleteRegistrationRequest request) {
