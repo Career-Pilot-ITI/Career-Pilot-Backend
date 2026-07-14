@@ -3,12 +3,15 @@ package com.careerpilot.backend.controller;
 import com.careerpilot.backend.annotation.RateLimit;
 import com.careerpilot.backend.controller.response.ApiResponse;
 import com.careerpilot.backend.controller.response.LoginResponse;
+import com.careerpilot.backend.controller.response.OtpAuthResponse;
 import com.careerpilot.backend.dto.LoginUserDto;
 import com.careerpilot.backend.dto.RegisterUserDto;
+import com.careerpilot.backend.dto.request.CompleteRegistrationRequest;
 import com.careerpilot.backend.dto.request.RefreshTokenRequest;
 import com.careerpilot.backend.dto.request.SendOtpRequest;
 import com.careerpilot.backend.dto.request.VerifyOtpRequest;
 import com.careerpilot.backend.dto.request.VerifyRequest;
+import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.service.IAuthentication;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -17,6 +20,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 
@@ -115,8 +120,17 @@ public class AuthController {
     }
 
     @PostMapping("/verify-otp")
-    public ResponseEntity<LoginResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
-        LoginResponse response = iAuthentication.loginWithOtp(request.getPhoneNumber(), request.getCode());
+    public ResponseEntity<OtpAuthResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        OtpAuthResponse response = iAuthentication.loginWithOtp(request.getPhoneNumber(), request.getCode());
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/complete-registration")
+    public ResponseEntity<ApiResponse> completeRegistration(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody CompleteRegistrationRequest request) {
+        CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+        iAuthentication.completeRegistration(customUserDetails.getUser().getId(), request);
+        return ResponseEntity.ok(new ApiResponse("Registration completed"));
     }
 }
