@@ -2,11 +2,15 @@ package com.careerpilot.backend.entity;
 
 import com.careerpilot.backend.entity.ENUMs.PaymentStatus;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "payment_transactions")
+@Setter
+@Getter
 public class PaymentTransaction {
 
     @Id
