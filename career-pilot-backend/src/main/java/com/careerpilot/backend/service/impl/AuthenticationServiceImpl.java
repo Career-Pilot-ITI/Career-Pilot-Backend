@@ -1,13 +1,19 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.AuthException;
+import com.careerpilot.backend.controller.response.AuthTokensResponse;
 import com.careerpilot.backend.controller.response.LoginResponse;
+import com.careerpilot.backend.controller.response.OtpAuthResponse;
+import com.careerpilot.backend.controller.response.UserResponse;
 import com.careerpilot.backend.dto.LoginUserDto;
 import com.careerpilot.backend.dto.RegisterUserDto;
+import com.careerpilot.backend.dto.request.CompleteRegistrationRequest;
 import com.careerpilot.backend.entity.Role;
 import com.careerpilot.backend.entity.User;
+import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserRole;
 import com.careerpilot.backend.repository.IRoleRepository;
+import com.careerpilot.backend.repository.IUserProfileRepository;
 import com.careerpilot.backend.repository.IUserRepository;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.security.jwt.JwtService;
@@ -43,6 +49,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   private final TokenBlacklistService tokenBlacklistService;
   private final RefreshTokenService refreshTokenService;
   private final IOtpService  otpService;
+  private final IUserProfileRepository iUserProfileRepository;
   private User user;
 
   @Override
@@ -63,11 +70,13 @@ public class AuthenticationServiceImpl implements IAuthentication {
   }
 
   @Override
-  public LoginResponse loginWithOtp(String phoneNumber, String code) {
+  public OtpAuthResponse loginWithOtp(String phoneNumber, String code) {
     otpService.verifyPhoneOtp(phoneNumber, code);
 
+    boolean isNewUser = false;
     User user = iUserRepository.findByPhoneNumber(phoneNumber).orElse(null);
     if (user == null) {
+      isNewUser = true;
       user = new User();
       user.setPhoneNumber(phoneNumber);
       user.setUsername("user_" + phoneNumber.substring(Math.max(0, phoneNumber.length() - 6)));
@@ -85,10 +94,63 @@ public class AuthenticationServiceImpl implements IAuthentication {
       iUserRepository.save(user);
     }
 
+    UserProfile profile = iUserProfileRepository.findByUserId(user.getId()).orElse(null);
+    if (profile == null) {
+      profile = new UserProfile();
+      profile.setUser(user);
+      profile.setCreatedAt(LocalDateTime.now());
+      iUserProfileRepository.save(profile);
+    }
+
     CustomUserDetails userDetails = new CustomUserDetails(user);
     String accessToken = jwtService.generateToken(userDetails);
     String refreshToken = refreshTokenService.generateRefreshToken(user.getUsername());
-    return new LoginResponse(accessToken, jwtService.getExpirationTime(), refreshToken);
+
+    AuthTokensResponse tokens = new AuthTokensResponse(accessToken, refreshToken, jwtService.getExpirationTime());
+    UserResponse userResponse = UserResponse.from(user, profile, isNewUser);
+    return new OtpAuthResponse(tokens, userResponse);
+  }
+
+  @Override
+  public void completeRegistration(Long userId, CompleteRegistrationRequest request) {
+    User user = iUserRepository.findById(userId)
+        .orElseThrow(() -> new AuthException.UserNotFoundException("User not found"));
+
+    if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
+      if (iUserRepository.findByUsername(request.getUsername()).isPresent()) {
+        throw new AuthException.UsernameAlreadyExistsException("Username already taken");
+      }
+      user.setUsername(request.getUsername());
+    }
+
+    if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
+      if (iUserRepository.findByEmail(request.getEmail()).isPresent()) {
+        throw new AuthException.UserAlreadyExistsException("Email already registered");
+      }
+      user.setEmail(request.getEmail());
+    }
+
+    iUserRepository.save(user);
+
+    UserProfile profile = iUserProfileRepository.findByUserId(userId)
+        .orElseThrow(() -> new RuntimeException("User profile not found"));
+
+    profile.setDisplayName(request.getDisplayName());
+    profile.setAvatarUrl(request.getAvatarUrl());
+    profile.setGender(request.getGender());
+    profile.setDateOfBirth(request.getDateOfBirth());
+    profile.setTargetRole(request.getTargetRole());
+    profile.setIndustry(request.getIndustry());
+    profile.setExperienceLevel(request.getExperienceLevel());
+    profile.setCurrentJobTitle(request.getCurrentJobTitle());
+    profile.setYearsOfExperience(request.getYearsOfExperience());
+    profile.setCvUrl(request.getResumeUrl());
+    profile.setTargetCompanies(request.getTargetCompanies() != null ? String.join(",", request.getTargetCompanies()) : null);
+    profile.setEducationLevel(request.getEducationLevel());
+    profile.setTermsAccepted(request.getTermsAccepted());
+    profile.setUpdatedAt(LocalDateTime.now());
+
+    iUserProfileRepository.save(profile);
   }
 
   @Override

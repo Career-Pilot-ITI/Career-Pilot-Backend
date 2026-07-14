@@ -2,8 +2,10 @@ package com.careerpilot.backend.service;
 
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import com.careerpilot.backend.controller.response.LoginResponse;
+import com.careerpilot.backend.controller.response.OtpAuthResponse;
 import com.careerpilot.backend.dto.LoginUserDto;
 import com.careerpilot.backend.dto.RegisterUserDto;
+import com.careerpilot.backend.dto.request.CompleteRegistrationRequest;
 import com.careerpilot.backend.entity.User;
 
 public interface IAuthentication {
@@ -11,7 +13,7 @@ public interface IAuthentication {
 
   void sendOtp(String phoneNumber);
 
-  LoginResponse loginWithOtp(String phoneNumber, String code);
+  OtpAuthResponse loginWithOtp(String phoneNumber, String code);
 
   LoginResponse refresh(String refreshToken);
 
@@ -28,4 +30,6 @@ public interface IAuthentication {
   void resetPassword(String email, String verificationCode, String newPassword);
 
   String handleOAuthLogin(OAuth2AuthenticationToken authentication);
+
+  void completeRegistration(Long userId, CompleteRegistrationRequest request);
 }
