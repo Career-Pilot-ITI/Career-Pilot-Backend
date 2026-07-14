@@ -1,6 +1,7 @@
 package com.careerpilot.backend.entity;
 
 import com.careerpilot.backend.entity.ENUMs.DifficultyLevel;
+import com.careerpilot.backend.entity.ENUMs.QuestionCategory;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -26,7 +27,9 @@ public class QuestionBank {
     private DifficultyLevel difficultyLevel;  // EASY, MEDIUM, HARD
 
     @Column(name = "category")
-    private String category;          // "behavioral", "technical", "project"
+    @Enumerated(EnumType.STRING)
+    private QuestionCategory category;
+
 
     @Column(name = "expected_keywords")
     private String expectedKeywords;  // JSON array

@@ -194,3 +194,18 @@ CREATE INDEX idx_rag_context_user ON rag_context_documents(user_id, doc_type);
 CREATE INDEX idx_rag_context_vector ON rag_context_documents USING ivfflat (vector vector_cosine_ops);
 CREATE INDEX idx_session_user ON interview_sessions(user_id, created_at DESC);
 CREATE INDEX idx_question_bank_track ON question_bank(track_id);
+
+CREATE TABLE user_skills (
+                             id BIGSERIAL PRIMARY KEY,
+                             user_id BIGINT NOT NULL REFERENCES users(id),
+                             skill_name VARCHAR(255) NOT NULL,
+                             category VARCHAR(50) NOT NULL,
+                             performance_score INTEGER DEFAULT 0,
+                             times_assessed INTEGER NOT NULL DEFAULT 0,
+                             last_assessed_at TIMESTAMP,
+                             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                             updated_at TIMESTAMP,
+                             CONSTRAINT uk_user_skill UNIQUE (user_id, skill_name)
+);
+
+CREATE INDEX idx_user_skills ON user_skills(user_id);
