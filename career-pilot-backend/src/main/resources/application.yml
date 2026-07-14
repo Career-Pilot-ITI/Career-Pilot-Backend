@@ -9,7 +9,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/career_pilot}
     username: ${DB_USERNAME:career_pilot}
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:career_pilot}
     driver-class-name: org.postgresql.Driver
 
   jpa:
