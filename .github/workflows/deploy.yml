@@ -44,7 +44,9 @@ jobs:
             --spring.datasource.url=jdbc:postgresql://localhost:5432/career_pilot \
             --spring.datasource.username=career_pilot \
             --spring.datasource.password=career_pilot \
-            --spring.data.redis.host=localhost &
+            --spring.data.redis.host=localhost \
+            --security.jwt.secret-key="JfDznjRadS1ckJhWUKVy2KPCvLEUyrpNPYAW7cZAwDw=" \
+            --security.jwt.expiration-time=3600000 &
           sleep 45
           curl -s http://localhost:8080/v3/api-docs > ../docs/openapi.json
           kill %1 2>/dev/null || true
