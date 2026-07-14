@@ -1,0 +1,56 @@
+name: Deploy API Docs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: career_pilot
+          POSTGRES_USER: career_pilot
+          POSTGRES_PASSWORD: career_pilot
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+          cache: maven
+
+      - name: Build
+        run: mvn package -DskipTests -B
+        working-directory: career-pilot-backend
+
+      - name: Start app and fetch OpenAPI spec
+        run: |
+          java -jar target/*.jar \
+            --spring.datasource.url=jdbc:postgresql://localhost:5432/career_pilot \
+            --spring.datasource.username=career_pilot \
+            --spring.datasource.password=career_pilot \
+            --spring.data.redis.host=localhost &
+          sleep 45
+          curl -s http://localhost:8080/v3/api-docs > ../docs/openapi.json
+          kill %1 2>/dev/null || true
+        working-directory: career-pilot-backend
+
+      - uses: peaceiris/actions-gh-pages@v3
+        with:
+          publish_dir: ./docs
+          github_token: ${{ secrets.GITHUB_TOKEN }}

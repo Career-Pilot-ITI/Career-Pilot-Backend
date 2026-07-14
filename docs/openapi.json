@@ -1,0 +1,9 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Career Pilot API",
+    "description": "Backend API for Career Pilot authentication & authorization",
+    "version": "1.0.0"
+  },
+  "paths": {}
+}
