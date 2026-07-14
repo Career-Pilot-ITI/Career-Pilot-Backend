@@ -9,10 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Data
-public class CompleteRegistrationRequest {
-    @Schema(example = "Amr Shams")
-    private String displayName;
-
+public class UpdateProfileRequest {
     @Size(min = 3, max = 20, message = "Username must be between 3 and 20 characters")
     @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "Username must be alphanumeric with underscores only")
     @Schema(example = "amr_shams")
@@ -21,6 +18,16 @@ public class CompleteRegistrationRequest {
     @Pattern(regexp = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", message = "Invalid email format")
     @Schema(example = "amr.shams@example.com")
     private String email;
+
+    @Schema(example = "currentPass123", description = "Required when setting a new password")
+    private String currentPassword;
+
+    @Size(min = 6, message = "Password must be at least 6 characters")
+    @Schema(example = "newPass456")
+    private String newPassword;
+
+    @Schema(example = "Amr Shams")
+    private String displayName;
 
     @Schema(example = "https://storage.example.com/avatars/amr_shams.jpg")
     private String avatarUrl;
@@ -38,7 +45,6 @@ public class CompleteRegistrationRequest {
     @Schema(example = "Technology")
     private String industry;
 
-    @Pattern(regexp = "^(student|entry|mid|senior|executive)$", message = "Invalid experience level")
     @Schema(example = "senior")
     private String experienceLevel;
 
@@ -49,7 +55,7 @@ public class CompleteRegistrationRequest {
     private Integer yearsOfExperience;
 
     @Schema(example = "https://storage.example.com/resumes/amr_shams_cv.pdf")
-    private String resumeUrl;
+    private String cvUrl;
 
     @Schema(example = "[\"Java\",\"Spring Boot\",\"PostgreSQL\"]")
     private List<String> skills;
@@ -60,6 +66,15 @@ public class CompleteRegistrationRequest {
     @Schema(example = "bachelors")
     private String educationLevel;
 
+    @Schema(example = "Africa/Cairo")
+    private String timezone;
+
     @Schema(example = "true")
     private Boolean termsAccepted;
+
+    @Schema(example = "PLUS")
+    private String subscriptionTier;
+
+    @Schema(example = "1")
+    private Long trackId;
 }

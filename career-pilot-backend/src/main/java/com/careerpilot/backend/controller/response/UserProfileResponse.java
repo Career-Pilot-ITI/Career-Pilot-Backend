@@ -19,12 +19,16 @@ public class UserProfileResponse {
     private String experienceLevel;
     private String currentJobTitle;
     private Integer yearsOfExperience;
-    private String resumeUrl;
+    private String cvUrl;
     private List<String> skills;
     private List<String> targetCompanies;
     private String educationLevel;
     private String timezone;
     private Boolean termsAccepted;
+    private String subscriptionTier;
+    private Integer coinBalance;
+    private Boolean onboardingCompleted;
+    private String trackName;
 
     public static UserProfileResponse from(UserProfile profile) {
         UserProfileResponse r = new UserProfileResponse();
@@ -43,10 +47,16 @@ public class UserProfileResponse {
         r.setExperienceLevel(profile.getExperienceLevel());
         r.setCurrentJobTitle(profile.getCurrentJobTitle());
         r.setYearsOfExperience(profile.getYearsOfExperience());
-        r.setResumeUrl(profile.getCvUrl());
+        r.setCvUrl(profile.getCvUrl());
         r.setEducationLevel(profile.getEducationLevel());
         r.setTimezone(profile.getTimezone());
         r.setTermsAccepted(profile.getTermsAccepted());
+        r.setSubscriptionTier(profile.getSubscriptionTier());
+        r.setCoinBalance(profile.getCoinBalance());
+        r.setOnboardingCompleted(profile.getOnboardingCompleted());
+        if (profile.getTrack() != null) {
+            r.setTrackName(profile.getTrack().getName());
+        }
 
         return r;
     }

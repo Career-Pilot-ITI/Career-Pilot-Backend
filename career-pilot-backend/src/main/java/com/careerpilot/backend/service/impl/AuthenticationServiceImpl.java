@@ -7,14 +7,19 @@ import com.careerpilot.backend.controller.response.OtpAuthResponse;
 import com.careerpilot.backend.controller.response.UserResponse;
 import com.careerpilot.backend.dto.LoginUserDto;
 import com.careerpilot.backend.dto.RegisterUserDto;
-import com.careerpilot.backend.dto.request.CompleteRegistrationRequest;
+import com.careerpilot.backend.dto.request.UpdateProfileRequest;
+import com.careerpilot.backend.dto.request.VerifyOtpRequest;
 import com.careerpilot.backend.entity.Role;
+import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserRole;
+import com.careerpilot.backend.entity.UserSkill;
+import com.careerpilot.backend.entity.ENUMs.SkillCategory;
 import com.careerpilot.backend.repository.IRoleRepository;
 import com.careerpilot.backend.repository.IUserProfileRepository;
 import com.careerpilot.backend.repository.IUserRepository;
+import com.careerpilot.backend.repository.IUserSkillRepository;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.security.jwt.JwtService;
 import com.careerpilot.backend.security.jwt.RefreshTokenService;
@@ -23,6 +28,7 @@ import com.careerpilot.backend.service.IAuthentication;
 import com.careerpilot.backend.service.IOtpService;
 import com.careerpilot.backend.utils.IEmailService;
 import jakarta.mail.MessagingException;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -32,9 +38,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,8 +58,10 @@ public class AuthenticationServiceImpl implements IAuthentication {
   private final IEmailService emailService;
   private final TokenBlacklistService tokenBlacklistService;
   private final RefreshTokenService refreshTokenService;
-  private final IOtpService  otpService;
+  private final IOtpService otpService;
   private final IUserProfileRepository iUserProfileRepository;
+  private final IUserSkillRepository iUserSkillRepository;
+  private final EntityManager entityManager;
   private User user;
 
   @Override
@@ -64,6 +76,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
     String refreshToken = refreshTokenService.generateRefreshToken(customUserDetails.getUsername());
     return new LoginResponse(accessToken, jwtService.getExpirationTime(), refreshToken);
   }
+
   @Override
   public void sendOtp(String phoneNumber) {
     otpService.sendPhoneOtp(phoneNumber);
@@ -81,6 +94,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
       user.setPhoneNumber(phoneNumber);
       user.setUsername("user_" + phoneNumber.substring(Math.max(0, phoneNumber.length() - 6)));
       user.setEnabled(true);
+      user.setCreatedAt(LocalDateTime.now());
 
       Role role = iRoleRepository.findByName("ROLE_USER")
           .orElseThrow(() -> new RuntimeException("User role not found"));
@@ -108,11 +122,18 @@ public class AuthenticationServiceImpl implements IAuthentication {
 
     AuthTokensResponse tokens = new AuthTokensResponse(accessToken, refreshToken, jwtService.getExpirationTime());
     UserResponse userResponse = UserResponse.from(user, profile, isNewUser);
+    userResponse.getProfile().setSkills(getSkillNames(user.getId()));
     return new OtpAuthResponse(tokens, userResponse);
   }
 
   @Override
-  public void completeRegistration(Long userId, CompleteRegistrationRequest request) {
+  public OtpAuthResponse verifyOtp(VerifyOtpRequest request) {
+    return loginWithOtp(request.getPhoneNumber(), request.getCode());
+  }
+
+  @Override
+  @Transactional
+  public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
     User user = iUserRepository.findById(userId)
         .orElseThrow(() -> new AuthException.UserNotFoundException("User not found"));
 
@@ -130,6 +151,17 @@ public class AuthenticationServiceImpl implements IAuthentication {
       user.setEmail(request.getEmail());
     }
 
+    if (request.getNewPassword() != null) {
+      if (user.getPassword() != null) {
+        if (request.getCurrentPassword() == null
+            || !passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+          throw new AuthException.UserNotFoundException("Current password is incorrect");
+        }
+      }
+      user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+    }
+
+    user.setUpdatedAt(LocalDateTime.now());
     iUserRepository.save(user);
 
     UserProfile profile = iUserProfileRepository.findByUserId(userId)
@@ -144,13 +176,37 @@ public class AuthenticationServiceImpl implements IAuthentication {
     if (request.getExperienceLevel() != null) profile.setExperienceLevel(request.getExperienceLevel());
     if (request.getCurrentJobTitle() != null) profile.setCurrentJobTitle(request.getCurrentJobTitle());
     if (request.getYearsOfExperience() != null) profile.setYearsOfExperience(request.getYearsOfExperience());
-    if (request.getResumeUrl() != null) profile.setCvUrl(request.getResumeUrl());
-    if (request.getTargetCompanies() != null) profile.setTargetCompanies(String.join(",", request.getTargetCompanies()));
+    if (request.getCvUrl() != null) profile.setCvUrl(request.getCvUrl());
+    if (request.getTargetCompanies() != null)
+      profile.setTargetCompanies(String.join(",", request.getTargetCompanies()));
     if (request.getEducationLevel() != null) profile.setEducationLevel(request.getEducationLevel());
+    if (request.getTimezone() != null) profile.setTimezone(request.getTimezone());
     if (request.getTermsAccepted() != null) profile.setTermsAccepted(request.getTermsAccepted());
+    if (request.getSubscriptionTier() != null) profile.setSubscriptionTier(request.getSubscriptionTier());
+    if (request.getTrackId() != null) {
+      Track track = entityManager.find(Track.class, request.getTrackId());
+      if (track != null) profile.setTrack(track);
+    }
     profile.setUpdatedAt(LocalDateTime.now());
 
     iUserProfileRepository.save(profile);
+
+    if (request.getSkills() != null) {
+      iUserSkillRepository.deleteByUserId(userId);
+      for (String skillName : request.getSkills()) {
+        if (skillName == null || skillName.isBlank()) continue;
+        UserSkill skill = new UserSkill();
+        skill.setUser(user);
+        skill.setSkillName(skillName.trim());
+        skill.setCategory(SkillCategory.TECHNICAL);
+        skill.setCreatedAt(LocalDateTime.now());
+        iUserSkillRepository.save(skill);
+      }
+    }
+
+    UserResponse userResponse = UserResponse.from(user, profile, false);
+    userResponse.getProfile().setSkills(getSkillNames(userId));
+    return userResponse;
   }
 
   @Override
@@ -178,7 +234,9 @@ public class AuthenticationServiceImpl implements IAuthentication {
     SecurityContextHolder.clearContext();
   }
 
+  /** @deprecated Use OTP signup instead */
   @Override
+  @Deprecated
   public User signup(RegisterUserDto registerUserDto) {
     checkIfUserExists(registerUserDto);
 
@@ -194,6 +252,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   }
 
   @Override
+  @Deprecated
   public void verifyUser(String email, String verificationCode) {
     User user = getUserByEmailOrThrow(email);
     validateVerificationCode(user, verificationCode);
@@ -201,6 +260,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   }
 
   @Override
+  @Deprecated
   public void resendVerificationCode(String email) {
     User user = getUserByEmailOrThrow(email);
     if (user.isEnabled()) {
@@ -214,6 +274,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   }
 
   @Override
+  @Deprecated
   public void requestPasswordReset(String email) {
     User user = getUserByEmailOrThrow(email);
     String verificationCode = generateVerificationCode();
@@ -224,6 +285,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   }
 
   @Override
+  @Deprecated
   public void resetPassword(String email, String verificationCode, String newPassword) {
     User user = getUserByEmailOrThrow(email);
     validateVerificationCode(user, verificationCode);
@@ -356,6 +418,16 @@ public class AuthenticationServiceImpl implements IAuthentication {
       return fullName.split(" ")[0];
     }
     return fullName;
+  }
+
+  private List<String> getSkillNames(Long userId) {
+    List<UserSkill> userSkills = iUserSkillRepository.findByUserId(userId);
+    if (userSkills == null || userSkills.isEmpty()) {
+      return Collections.emptyList();
+    }
+    return userSkills.stream()
+        .map(UserSkill::getSkillName)
+        .collect(Collectors.toList());
   }
 
   private User createOAuthUser(String name, String email) {
