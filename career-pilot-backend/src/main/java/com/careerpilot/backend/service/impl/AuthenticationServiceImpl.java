@@ -135,19 +135,19 @@ public class AuthenticationServiceImpl implements IAuthentication {
     UserProfile profile = iUserProfileRepository.findByUserId(userId)
         .orElseThrow(() -> new RuntimeException("User profile not found"));
 
-    profile.setDisplayName(request.getDisplayName());
-    profile.setAvatarUrl(request.getAvatarUrl());
-    profile.setGender(request.getGender());
-    profile.setDateOfBirth(request.getDateOfBirth());
-    profile.setTargetRole(request.getTargetRole());
-    profile.setIndustry(request.getIndustry());
-    profile.setExperienceLevel(request.getExperienceLevel());
-    profile.setCurrentJobTitle(request.getCurrentJobTitle());
-    profile.setYearsOfExperience(request.getYearsOfExperience());
-    profile.setCvUrl(request.getResumeUrl());
-    profile.setTargetCompanies(request.getTargetCompanies() != null ? String.join(",", request.getTargetCompanies()) : null);
-    profile.setEducationLevel(request.getEducationLevel());
-    profile.setTermsAccepted(request.getTermsAccepted());
+    if (request.getDisplayName() != null) profile.setDisplayName(request.getDisplayName());
+    if (request.getAvatarUrl() != null) profile.setAvatarUrl(request.getAvatarUrl());
+    if (request.getGender() != null) profile.setGender(request.getGender());
+    if (request.getDateOfBirth() != null) profile.setDateOfBirth(request.getDateOfBirth());
+    if (request.getTargetRole() != null) profile.setTargetRole(request.getTargetRole());
+    if (request.getIndustry() != null) profile.setIndustry(request.getIndustry());
+    if (request.getExperienceLevel() != null) profile.setExperienceLevel(request.getExperienceLevel());
+    if (request.getCurrentJobTitle() != null) profile.setCurrentJobTitle(request.getCurrentJobTitle());
+    if (request.getYearsOfExperience() != null) profile.setYearsOfExperience(request.getYearsOfExperience());
+    if (request.getResumeUrl() != null) profile.setCvUrl(request.getResumeUrl());
+    if (request.getTargetCompanies() != null) profile.setTargetCompanies(String.join(",", request.getTargetCompanies()));
+    if (request.getEducationLevel() != null) profile.setEducationLevel(request.getEducationLevel());
+    if (request.getTermsAccepted() != null) profile.setTermsAccepted(request.getTermsAccepted());
     profile.setUpdatedAt(LocalDateTime.now());
 
     iUserProfileRepository.save(profile);

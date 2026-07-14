@@ -1,6 +1,5 @@
 package com.careerpilot.backend.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -10,10 +9,8 @@ import java.util.List;
 
 @Data
 public class CompleteRegistrationRequest {
-    @NotBlank(message = "Display name is required")
     private String displayName;
 
-    @NotBlank(message = "Username is required")
     @Size(min = 3, max = 20, message = "Username must be between 3 and 20 characters")
     @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "Username must be alphanumeric with underscores only")
     private String username;
@@ -28,13 +25,10 @@ public class CompleteRegistrationRequest {
 
     private LocalDate dateOfBirth;
 
-    @NotBlank(message = "Target role is required")
     private String targetRole;
 
-    @NotBlank(message = "Industry is required")
     private String industry;
 
-    @NotBlank(message = "Experience level is required")
     @Pattern(regexp = "^(student|entry|mid|senior|executive)$", message = "Invalid experience level")
     private String experienceLevel;
 
