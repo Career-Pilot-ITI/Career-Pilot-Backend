@@ -3,12 +3,20 @@ package com.careerpilot.backend.entity;
 import com.careerpilot.backend.entity.ENUMs.DifficultyLevel;
 import com.careerpilot.backend.entity.ENUMs.QuestionCategory;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
 @Table(name = "question_bank")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class QuestionBank {
 
     @Id
@@ -24,15 +32,14 @@ public class QuestionBank {
 
     @Column(name = "difficulty_level")
     @Enumerated(EnumType.STRING)
-    private DifficultyLevel difficultyLevel;  // EASY, MEDIUM, HARD
+    private DifficultyLevel difficultyLevel;
 
     @Column(name = "category")
     @Enumerated(EnumType.STRING)
     private QuestionCategory category;
 
-
     @Column(name = "expected_keywords")
-    private String expectedKeywords;  // JSON array
+    private String expectedKeywords;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
@@ -40,8 +47,20 @@ public class QuestionBank {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     // Relationships
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL)
     private List<UserQuestionHistory> history;
-}
 
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}
