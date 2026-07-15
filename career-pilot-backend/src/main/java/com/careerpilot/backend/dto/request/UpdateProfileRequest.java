@@ -29,8 +29,8 @@ public class UpdateProfileRequest {
     @Schema(example = "Amr Shams")
     private String displayName;
 
-    @Schema(example = "https://storage.example.com/avatars/amr_shams.jpg")
-    private String avatarUrl;
+    @Schema(example = "7", description = "ID of an uploaded avatar file (from /api/v1/files/upload)")
+    private Long avatarFileId;
 
     @Pattern(regexp = "^(male|female)$", message = "Gender must be male or female")
     @Schema(example = "male")
@@ -54,8 +54,8 @@ public class UpdateProfileRequest {
     @Schema(example = "5")
     private Integer yearsOfExperience;
 
-    @Schema(example = "https://storage.example.com/resumes/amr_shams_cv.pdf")
-    private String cvUrl;
+    @Schema(example = "42", description = "ID of an uploaded CV file (from /api/v1/files/upload)")
+    private Long cvFileId;
 
     @Schema(example = "[\"Java\",\"Spring Boot\",\"PostgreSQL\"]")
     private List<String> skills;
