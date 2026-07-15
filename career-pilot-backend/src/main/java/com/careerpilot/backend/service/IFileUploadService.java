@@ -1,7 +1,8 @@
 package com.careerpilot.backend.service;
 
+import com.careerpilot.backend.controller.response.UserFileResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface IFileUploadService {
-    String upload(MultipartFile file, String type);
+    UserFileResponse upload(MultipartFile file, String type, Long userId);
 }

@@ -12,10 +12,12 @@ import com.careerpilot.backend.dto.request.VerifyOtpRequest;
 import com.careerpilot.backend.entity.Role;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
+import com.careerpilot.backend.entity.UserFile;
 import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserRole;
 import com.careerpilot.backend.entity.UserSkill;
 import com.careerpilot.backend.entity.ENUMs.SkillCategory;
+import com.careerpilot.backend.repository.IUserFileRepository;
 import com.careerpilot.backend.repository.IRoleRepository;
 import com.careerpilot.backend.repository.IUserProfileRepository;
 import com.careerpilot.backend.repository.IUserRepository;
@@ -61,6 +63,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   private final IOtpService otpService;
   private final IUserProfileRepository iUserProfileRepository;
   private final IUserSkillRepository iUserSkillRepository;
+  private final IUserFileRepository iUserFileRepository;
   private final EntityManager entityManager;
   private User user;
 
@@ -168,7 +171,6 @@ public class AuthenticationServiceImpl implements IAuthentication {
         .orElseThrow(() -> new RuntimeException("User profile not found"));
 
     if (request.getDisplayName() != null) profile.setDisplayName(request.getDisplayName());
-    if (request.getAvatarUrl() != null) profile.setAvatarUrl(request.getAvatarUrl());
     if (request.getGender() != null) profile.setGender(request.getGender());
     if (request.getDateOfBirth() != null) profile.setDateOfBirth(request.getDateOfBirth());
     if (request.getTargetRole() != null) profile.setTargetRole(request.getTargetRole());
@@ -176,7 +178,17 @@ public class AuthenticationServiceImpl implements IAuthentication {
     if (request.getExperienceLevel() != null) profile.setExperienceLevel(request.getExperienceLevel());
     if (request.getCurrentJobTitle() != null) profile.setCurrentJobTitle(request.getCurrentJobTitle());
     if (request.getYearsOfExperience() != null) profile.setYearsOfExperience(request.getYearsOfExperience());
-    if (request.getCvUrl() != null) profile.setCvUrl(request.getCvUrl());
+
+    if (request.getAvatarFileId() != null) {
+        UserFile avatarFile = iUserFileRepository.findByIdAndUserId(request.getAvatarFileId(), userId)
+                .orElseThrow(() -> new AuthException.UserNotFoundException("Avatar file not found or does not belong to you"));
+        profile.setAvatarUrl(avatarFile.getStoredPath());
+    }
+    if (request.getCvFileId() != null) {
+        UserFile cvFile = iUserFileRepository.findByIdAndUserId(request.getCvFileId(), userId)
+                .orElseThrow(() -> new AuthException.UserNotFoundException("CV file not found or does not belong to you"));
+        profile.setCvUrl(cvFile.getStoredPath());
+    }
     if (request.getTargetCompanies() != null)
       profile.setTargetCompanies(String.join(",", request.getTargetCompanies()));
     if (request.getEducationLevel() != null) profile.setEducationLevel(request.getEducationLevel());
