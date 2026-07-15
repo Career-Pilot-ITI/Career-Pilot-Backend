@@ -11,26 +11,14 @@ spring:
     username: ${DB_USERNAME:career_pilot}
     password: ${DB_PASSWORD:career_pilot}
     driver-class-name: org.postgresql.Driver
-
-  paymob:
-    base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com}
-    secret-key: ${PAYMOB_SECRET_KEY}
-    public-key: ${PAYMOB_PUBLIC_KEY}
-    hmac-secret: ${PAYMOB_HMAC_SECRET}
-    notification-url: ${PAYMOB_NOTIFICATION_URL}
-    redirection-url: ${PAYMOB_REDIRECTION_URL:http://localhost:5173/payment/result}
-    integration-ids:
-      card: ${PAYMOB_INTEGRATION_ID_CARD}
   jpa:
     hibernate:
       ddl-auto: validate
     show-sql: true
-
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
-
   mail:
     host: smtp.gmail.com
     port: 587
@@ -39,7 +27,6 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
-
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -53,11 +40,20 @@ spring:
           max-idle: 8
           min-idle: 2
           max-wait: -1ms
-
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
+
+paymob:
+  base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com}
+  secret-key: ${PAYMOB_SECRET_KEY}
+  public-key: ${PAYMOB_PUBLIC_KEY}
+  hmac-secret: ${PAYMOB_HMAC_SECRET}
+  notification-url: ${PAYMOB_NOTIFICATION_URL}
+  redirection-url: ${PAYMOB_REDIRECTION_URL:http://localhost:5173/payment/result}
+  integration-ids:
+    card: ${PAYMOB_INTEGRATION_ID_CARD}
 
 security:
   jwt:

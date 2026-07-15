@@ -59,9 +59,9 @@ public class PaymentTransaction {
 
     @Column(name = "merchant_order_id", unique = true)
     private String merchantOrderId;
+
     @Column(name = "provider", nullable = false)
-    @Enumerated(EnumType.STRING)
-    private PaymentProvider provider = PaymentProvider.PAYMOB;
+    private String provider = PaymentProvider.PAYMOB.toString();
 
     @Column(name = "provider_transaction_id")
     private String providerTransactionId;

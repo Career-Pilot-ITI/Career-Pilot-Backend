@@ -24,7 +24,7 @@ public class PaymentController {
     public PaymentInitiationResponse initiate(@Valid @RequestBody InitiatePaymentRequest request,
                                               @AuthenticationPrincipal CustomUserDetails userDetails) {
         return paymentService.initiatePayment(
-                userDetails.getUser(), request.getAmount(), request.getCurrency(), request.getMethod());
+                userDetails.getUser(), request.getAmount(), request.getCurrency(), request.getMethod(), request.getProvider());
     }
 
     @PostMapping("/webhook/{provider}")

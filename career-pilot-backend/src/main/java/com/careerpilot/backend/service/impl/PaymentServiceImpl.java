@@ -5,6 +5,7 @@ import com.careerpilot.backend.controller.response.PaymentInitiationResponse;
 import com.careerpilot.backend.dto.payment.PaymentEventResult;
 import com.careerpilot.backend.dto.payment.PaymentInitiationRequest;
 import com.careerpilot.backend.dto.payment.PaymentInitiationResult;
+import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
 import com.careerpilot.backend.entity.PaymentTransaction;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IPaymentTransactionRepository;
@@ -29,13 +30,16 @@ public class PaymentServiceImpl implements IPaymentService {
 
     @Override
     @Transactional
-    public PaymentInitiationResponse initiatePayment(User user, double amount, String currency, String method) {
+    public PaymentInitiationResponse initiatePayment(User user, double amount, String currency, String method, PaymentProvider paymentProvider) {
         String merchantOrderId = "CP-" + user.getId() + "-" + UUID.randomUUID();
 
         PaymentInitiationRequest req = new PaymentInitiationRequest(
-                user.getId(), Math.round(amount * 100), currency, merchantOrderId, method);
+                user.getId(), Math.round(amount * 100), currency, merchantOrderId, method,
+                user.getUsername(), user.getEmail(), user.getPhoneNumber());
 
-        IPaymentProvider provider = providerResolver.resolve("PAYMOB");
+//        req.setUser(user);
+
+        IPaymentProvider provider = providerResolver.resolve(paymentProvider.toString());
         PaymentInitiationResult result = provider.initiate(req);
 
         PaymentTransaction tx = new PaymentTransaction();

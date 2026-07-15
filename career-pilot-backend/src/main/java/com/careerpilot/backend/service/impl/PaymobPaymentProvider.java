@@ -27,9 +27,7 @@ public class PaymobPaymentProvider implements IPaymentProvider {
 
     @Override
     public PaymentInitiationResult initiate(PaymentInitiationRequest request) {
-        String clientSecret = paymobClient.createIntention(
-                request.getAmountCents(), request.getCurrency(),
-                request.getMerchantOrderId(), request.getPaymentMethod());
+        String clientSecret = paymobClient.createIntention(request);
         return new PaymentInitiationResult(paymobClient.buildCheckoutUrl(clientSecret), clientSecret);
     }
 

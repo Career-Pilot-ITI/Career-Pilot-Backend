@@ -1,5 +1,8 @@
 package com.careerpilot.backend.dto.request;
 
+import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -17,4 +20,7 @@ public class InitiatePaymentRequest {
 
     @NotBlank
     private String method; // "card" | "wallet" | "meeza"
+
+    @NotNull
+    private PaymentProvider provider;
 }

@@ -13,4 +13,7 @@ public class PaymentInitiationRequest {
     private String currency;
     private String merchantOrderId;
     private String paymentMethod;
+    private String username;
+    private String email;
+    private String phoneNumber;
 }
