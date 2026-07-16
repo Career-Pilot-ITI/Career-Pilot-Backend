@@ -1,6 +1,7 @@
 package com.careerpilot.backend.controller.advice;
 
 import com.careerpilot.backend.aspect.RateLimitExceededException;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import com.careerpilot.backend.controller.response.ApiResponse;
 
 @ControllerAdvice
+@Order(0)
 public class AuthExceptionHandler {
 
   @ExceptionHandler(AuthException.UserAlreadyExistsException.class)
@@ -46,11 +48,6 @@ public class AuthExceptionHandler {
   @ExceptionHandler(RateLimitExceededException.class)
   public ResponseEntity<ApiResponse> handleRateLimitExceededException(RateLimitExceededException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  @ExceptionHandler(Exception.class)
-  public ResponseEntity<ApiResponse> handleGlobalException(Exception ex) {
-    return buildResponse("An unexpected error occurred. Please try again later.", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   @ExceptionHandler(AuthException.OtpExpiredException.class)
