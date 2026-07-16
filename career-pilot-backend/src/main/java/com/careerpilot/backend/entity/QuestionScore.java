@@ -1,11 +1,19 @@
 package com.careerpilot.backend.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "question_scores")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class QuestionScore {
 
     @Id
@@ -37,6 +45,10 @@ public class QuestionScore {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 
     public void calculateOverallScore() {
         this.overallScore = (contentRelevance * 40 +

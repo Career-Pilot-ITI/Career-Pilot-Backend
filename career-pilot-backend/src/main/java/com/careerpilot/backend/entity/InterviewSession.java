@@ -2,12 +2,20 @@ package com.careerpilot.backend.entity;
 
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
 @Table(name = "interview_sessions")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class InterviewSession {
 
     @Id
@@ -33,7 +41,7 @@ public class InterviewSession {
     private Integer overallScore;     // 0-100
 
     @Column(name = "rag_context_ids")
-    private String ragContextIds;     // JSON array أو comma-separated
+    private String ragContextIds;     // JSON array or comma-separated
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -50,4 +58,9 @@ public class InterviewSession {
 
     @OneToOne(mappedBy = "session", cascade = CascadeType.ALL)
     private FeedbackReport feedbackReport;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }
