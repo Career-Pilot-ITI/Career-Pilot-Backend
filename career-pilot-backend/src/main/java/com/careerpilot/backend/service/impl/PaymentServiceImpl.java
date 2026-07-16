@@ -26,7 +26,7 @@ import static com.careerpilot.backend.entity.ENUMs.PaymentStatus.*;
 public class PaymentServiceImpl implements IPaymentService {
 
     private final PaymentProviderResolver providerResolver;
-    private final IPaymentTransactionRepository transactionRepository;
+    private final PaymentTransactionService transactionService;
 
     @Override
     @Transactional
@@ -43,21 +43,12 @@ public class PaymentServiceImpl implements IPaymentService {
         IPaymentProvider provider = providerResolver.resolve(paymentProvider.toString());
         PaymentInitiationResult result = provider.initiate(req);
 
-        PaymentTransaction tx = new PaymentTransaction();
-        tx.setUser(user);
-        tx.setAmount(amount);
-        tx.setCurrency(currency);
-        tx.setStatus(PENDING);
-        tx.setPaymentMethod(method);
-        tx.setProvider(provider.getProviderName());
-        tx.setMerchantOrderId(merchantOrderId);
-        tx.setCoinPackSize(coinPackSize);
-        tx.setTierPurchased(tier);
-        tx.setCreatedAt(LocalDateTime.now());
-        transactionRepository.save(tx);
+        transactionService.createPending(user, amount, currency, method,
+                provider.getProviderName(), merchantOrderId, coinPackSize, tier);
 
         return new PaymentInitiationResponse(result.getCheckoutUrl(), merchantOrderId);
     }
+
     @Override
     @Transactional
     public void handleWebhook(String providerKey, String rawBody, Map<String, String> queryParams) {
@@ -69,7 +60,7 @@ public class PaymentServiceImpl implements IPaymentService {
                     "Webhook failed verification for provider: " + providerKey);
         }
 
-        PaymentTransaction tx = transactionRepository.findByMerchantOrderId(event.getMerchantOrderId())
+        PaymentTransaction tx = transactionService.findByMerchantOrderId(event.getMerchantOrderId())
                 .orElseThrow(() -> new PaymentException.UnknownTransactionException(
                         "Unknown order: " + event.getMerchantOrderId()));
 
@@ -77,17 +68,11 @@ public class PaymentServiceImpl implements IPaymentService {
             return; // idempotency guard against Paymob webhook retries
         }
 
-        tx.setStatus(event.isSuccess() ? CONFIRMED : FAILED);
-        tx.setProviderTransactionId(event.getProviderTransactionId());
-        tx.setRawWebhookPayload(event.getRawPayload());
-        if (!event.isSuccess()) {
-            tx.setFailureReason(event.getFailureReason());
-        }
-        tx.setConfirmedAt(LocalDateTime.now());
-        transactionRepository.save(tx);
-
         if (event.isSuccess()) {
+            transactionService.markConfirmed(tx, event.getProviderTransactionId(), event.getRawPayload());
             // TODO: credit coin_wallets or activate subscription
+        } else {
+            transactionService.markFailed(tx, event.getProviderTransactionId(), event.getRawPayload(), event.getFailureReason());
         }
     }
 }
