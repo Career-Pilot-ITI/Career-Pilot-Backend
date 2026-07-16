@@ -9,4 +9,5 @@ public class PaymentEventResult {
     private String merchantOrderId;
     private String providerTransactionId;
     private String rawPayload;
+    private String failureReason;
 }

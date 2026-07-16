@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/payments")
+@RequestMapping("/api/v1/payments")
 @RequiredArgsConstructor
 public class PaymentController {
 
@@ -24,8 +24,10 @@ public class PaymentController {
     public PaymentInitiationResponse initiate(@Valid @RequestBody InitiatePaymentRequest request,
                                               @AuthenticationPrincipal CustomUserDetails userDetails) {
         return paymentService.initiatePayment(
-                userDetails.getUser(), request.getAmount(), request.getCurrency(), request.getMethod(), request.getProvider());
+                userDetails.getUser(), request.getAmount(), request.getCurrency(), request.getMethod(),
+                request.getProvider(), request.getPurchaseType(), request.getCoinPackSize(), request.getTier());
     }
+
 
     @PostMapping("/webhook/{provider}")
     public void webhook(@PathVariable String provider,

@@ -1,11 +1,13 @@
 package com.careerpilot.backend.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "feedback_reports")
+@Data
 public class FeedbackReport {
 
     @Id

@@ -46,18 +46,25 @@ jobs:
             --spring.datasource.url=jdbc:postgresql://localhost:5432/career_pilot \
             --spring.datasource.username=career_pilot \
             --spring.data.redis.host=localhost \
+            --spring.ai.openai.api-key="${LLM_API_KEY:-not-set}" \
             --security.jwt.secret-key="JfDznjRadS1ckJhWUKVy2KPCvLEUyrpNPYAW7cZAwDw=" \
             --security.jwt.expiration-time=3600000 &
           PID=$!
           echo "Waiting for app (PID $PID) to serve /v3/api-docs..."
+          SUCCESS=false
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/v3/api-docs > ../docs/openapi.json; then
               echo "OpenAPI spec fetched successfully."
+              SUCCESS=true
               break
             fi
             sleep 3
           done
           kill $PID 2>/dev/null || true
+          if [ "$SUCCESS" != "true" ]; then
+            echo "ERROR: App failed to start or /v3/api-docs was never available."
+            exit 1
+          fi
         working-directory: career-pilot-backend
 
       - uses: peaceiris/actions-gh-pages@v3

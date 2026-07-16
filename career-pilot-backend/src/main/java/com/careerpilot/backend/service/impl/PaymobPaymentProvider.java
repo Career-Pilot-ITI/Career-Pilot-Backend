@@ -59,10 +59,23 @@ public class PaymobPaymentProvider implements IPaymentProvider {
         }
 
         Map<String, Object> order = (Map<String, Object>) obj.get("order");
+        boolean success = Boolean.TRUE.equals(obj.get("success"));
+
         event.setValid(true);
-        event.setSuccess(Boolean.TRUE.equals(obj.get("success")));
+        event.setSuccess(success);
         event.setMerchantOrderId(String.valueOf(order.get("merchant_order_id")));
         event.setProviderTransactionId(String.valueOf(obj.get("id")));
+
+        if (!success) {
+            Object dataObj = obj.get("data");
+            String message = null;
+            if (dataObj instanceof Map) {
+                Object msg = ((Map<String, Object>) dataObj).get("message");
+                message = msg != null ? String.valueOf(msg) : null;
+            }
+            event.setFailureReason(message != null ? message : "Declined by provider");
+        }
+
         return event;
     }
 }

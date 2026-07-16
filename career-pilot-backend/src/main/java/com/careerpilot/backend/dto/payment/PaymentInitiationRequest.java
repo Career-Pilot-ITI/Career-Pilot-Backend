@@ -16,4 +16,7 @@ public class PaymentInitiationRequest {
     private String username;
     private String email;
     private String phoneNumber;
+    private String purchaseType;
+    private Integer coinPackSize;
+    private String tier;
 }
