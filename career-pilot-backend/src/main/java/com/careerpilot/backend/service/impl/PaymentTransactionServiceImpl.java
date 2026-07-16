@@ -4,6 +4,7 @@ import com.careerpilot.backend.entity.ENUMs.PaymentStatus;
 import com.careerpilot.backend.entity.PaymentTransaction;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IPaymentTransactionRepository;
+import com.careerpilot.backend.service.IPaymentTransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,10 +15,11 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-public class PaymentTransactionService {
+public class PaymentTransactionServiceImpl implements IPaymentTransactionService {
 
     private final IPaymentTransactionRepository transactionRepository;
 
+    @Override
     public PaymentTransaction createPending(User user, double amount, String currency, String method,
                                             String providerName, String merchantOrderId,
                                             Integer coinPackSize, String tier) {
@@ -35,10 +37,12 @@ public class PaymentTransactionService {
         return transactionRepository.save(tx);
     }
 
+    @Override
     public Optional<PaymentTransaction> findByMerchantOrderId(String merchantOrderId) {
         return transactionRepository.findByMerchantOrderId(merchantOrderId);
     }
 
+    @Override
     public PaymentTransaction markConfirmed(PaymentTransaction tx, String providerTransactionId, String rawPayload) {
         tx.setStatus(PaymentStatus.CONFIRMED);
         tx.setProviderTransactionId(providerTransactionId);
@@ -47,6 +51,7 @@ public class PaymentTransactionService {
         return transactionRepository.save(tx);
     }
 
+    @Override
     public PaymentTransaction markFailed(PaymentTransaction tx, String providerTransactionId, String rawPayload, String failureReason) {
         tx.setStatus(PaymentStatus.FAILED);
         tx.setProviderTransactionId(providerTransactionId);
@@ -56,6 +61,7 @@ public class PaymentTransactionService {
         return transactionRepository.save(tx);
     }
 
+    @Override
     public Page<PaymentTransaction> findByUser(Long userId, Pageable pageable) {
         return transactionRepository.findByUserId(userId, pageable);
     }

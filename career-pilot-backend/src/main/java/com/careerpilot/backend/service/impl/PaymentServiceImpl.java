@@ -8,14 +8,13 @@ import com.careerpilot.backend.dto.payment.PaymentInitiationResult;
 import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
 import com.careerpilot.backend.entity.PaymentTransaction;
 import com.careerpilot.backend.entity.User;
-import com.careerpilot.backend.repository.IPaymentTransactionRepository;
 import com.careerpilot.backend.service.IPaymentProvider;
 import com.careerpilot.backend.service.IPaymentService;
+import com.careerpilot.backend.service.IPaymentTransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -26,7 +25,7 @@ import static com.careerpilot.backend.entity.ENUMs.PaymentStatus.*;
 public class PaymentServiceImpl implements IPaymentService {
 
     private final PaymentProviderResolver providerResolver;
-    private final PaymentTransactionService transactionService;
+    private final IPaymentTransactionService transactionService;
 
     @Override
     @Transactional
