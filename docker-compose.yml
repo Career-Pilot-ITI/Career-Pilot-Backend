@@ -49,10 +49,6 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?err}
       JWT_TIME: ${JWT_TIME:-3600000}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?err}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?err}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?err}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?err}
       MAIL_USERNAME: ${MAIL_USERNAME:?err}
       MAIL_PASSWORD: ${MAIL_PASSWORD:?err}
       URI_APP: ${URI_APP:-http://localhost:5173}
@@ -61,6 +57,13 @@ services:
       WIREWEB_API_KEY: ${WIREWEB_API_KEY:-}
       WIREWEB_SESSION_ID: ${WIREWEB_SESSION_ID:-}
       WIREWEB_BASE_URL: ${WIREWEB_BASE_URL:-https://app.wireweb.co.in}
+      PAYMOB_BASE_URL: ${PAYMOB_BASE_URL:-https://accept.paymob.com}
+      PAYMOB_SECRET_KEY: ${PAYMOB_SECRET_KEY:?err}
+      PAYMOB_PUBLIC_KEY: ${PAYMOB_PUBLIC_KEY:?err}
+      PAYMOB_HMAC_SECRET: ${PAYMOB_HMAC_SECRET:?err}
+      PAYMOB_NOTIFICATION_URL: ${PAYMOB_NOTIFICATION_URL:?err}
+      PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-http://localhost:5173/payment/result}
+      PAYMOB_INTEGRATION_ID_CARD: ${PAYMOB_INTEGRATION_ID_CARD:?err}
     depends_on:
       postgres:
         condition: service_healthy
