@@ -64,11 +64,22 @@ services:
       PAYMOB_NOTIFICATION_URL: ${PAYMOB_NOTIFICATION_URL:?err}
       PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-http://localhost:5173/payment/result}
       PAYMOB_INTEGRATION_ID_CARD: ${PAYMOB_INTEGRATION_ID_CARD:?err}
+      # LLM — Ollama on host, or set these in .env for OpenAI cloud
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen:latest}
+      SPRING_AI_OLLAMA_CONNECT_TIMEOUT: 30s
+      SPRING_AI_OLLAMA_READ_TIMEOUT: 5m
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-3.5-turbo}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.4}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   pgdata:
