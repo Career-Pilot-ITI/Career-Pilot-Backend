@@ -154,7 +154,7 @@ Forwarding   https://a1b2c3d4.ngrok-free.app -> http://localhost:8080
 
 Set in `.env`:
 ```
-PAYMOB_NOTIFICATION_URL=https://a1b2c3d4.ngrok-free.app/api/payments/webhook/paymob
+PAYMOB_NOTIFICATION_URL=https://a1b2c3d4.ngrok-free.app/api/v1/payments/webhook/paymob
 ```
 
 > Free ngrok plans generate a new subdomain every restart — update this value (and restart the backend) each time you restart ngrok.
@@ -176,7 +176,7 @@ Flyway applies migrations automatically on boot (`flyway.enabled: true`).
 1. **Register/log in** a test user via `/api/v1/auth/**` to get a Bearer token.
 2. **Initiate a payment:**
    ```
-   POST /api/payments/initiate
+   POST /api/v1/payments/initiate
    Authorization: Bearer <token>
    Content-Type: application/json
 
