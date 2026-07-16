@@ -3,11 +3,13 @@ package com.careerpilot.backend.entity;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.pgvector.PGvector;
 import jakarta.persistence.*;
+import lombok.Data;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "rag_context_documents")
+@Data
 public class RagContextDocument {
 
     @Id
