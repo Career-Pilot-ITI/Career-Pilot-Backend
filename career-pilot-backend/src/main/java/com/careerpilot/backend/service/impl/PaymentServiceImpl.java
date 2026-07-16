@@ -30,14 +30,15 @@ public class PaymentServiceImpl implements IPaymentService {
 
     @Override
     @Transactional
-    public PaymentInitiationResponse initiatePayment(User user, double amount, String currency, String method, PaymentProvider paymentProvider) {
+    public PaymentInitiationResponse initiatePayment(User user, double amount, String currency, String method,
+                                                     PaymentProvider paymentProvider, String purchaseType,
+                                                     Integer coinPackSize, String tier) {
         String merchantOrderId = "CP-" + user.getId() + "-" + UUID.randomUUID();
 
         PaymentInitiationRequest req = new PaymentInitiationRequest(
                 user.getId(), Math.round(amount * 100), currency, merchantOrderId, method,
-                user.getUsername(), user.getEmail(), user.getPhoneNumber());
-
-//        req.setUser(user);
+                user.getUsername(), user.getEmail(), user.getPhoneNumber(),
+                purchaseType, coinPackSize, tier);
 
         IPaymentProvider provider = providerResolver.resolve(paymentProvider.toString());
         PaymentInitiationResult result = provider.initiate(req);
@@ -50,12 +51,13 @@ public class PaymentServiceImpl implements IPaymentService {
         tx.setPaymentMethod(method);
         tx.setProvider(provider.getProviderName());
         tx.setMerchantOrderId(merchantOrderId);
+        tx.setCoinPackSize(coinPackSize);
+        tx.setTierPurchased(tier);
         tx.setCreatedAt(LocalDateTime.now());
         transactionRepository.save(tx);
 
         return new PaymentInitiationResponse(result.getCheckoutUrl(), merchantOrderId);
     }
-
     @Override
     @Transactional
     public void handleWebhook(String providerKey, String rawBody, Map<String, String> queryParams) {
@@ -79,7 +81,7 @@ public class PaymentServiceImpl implements IPaymentService {
         tx.setProviderTransactionId(event.getProviderTransactionId());
         tx.setRawWebhookPayload(event.getRawPayload());
         if (!event.isSuccess()) {
-            tx.setFailureReason("Declined by provider");
+            tx.setFailureReason(event.getFailureReason());
         }
         tx.setConfirmedAt(LocalDateTime.now());
         transactionRepository.save(tx);

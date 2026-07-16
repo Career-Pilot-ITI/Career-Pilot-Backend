@@ -37,6 +37,10 @@ public class PaymobClient {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Token " + config.getSecretKey());
 
+        String itemName = "COIN_PACK".equals(req.getPurchaseType())
+                ? req.getCoinPackSize() + " Coin Pack"
+                : "Subscription - " + req.getTier();
+
         Map<String, Object> billingData = new LinkedHashMap<>();
         billingData.put("first_name", req.getUsername());
         billingData.put("last_name", "N/A");
@@ -50,7 +54,7 @@ public class PaymobClient {
         body.put("special_reference", req.getMerchantOrderId());
         body.put("notification_url", config.getNotificationUrl());
         body.put("redirection_url", config.getRedirectionUrl());
-        body.put("items", List.of(Map.of("name", "Career Pilot Purchase", "amount", req.getAmountCents(), "quantity", 1)));
+        body.put("items", List.of(Map.of("name", itemName, "amount", req.getAmountCents(), "quantity", 1)));
         body.put("billing_data", billingData);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);

@@ -7,6 +7,7 @@ import com.careerpilot.backend.entity.User;
 import java.util.Map;
 
 public interface IPaymentService {
-    PaymentInitiationResponse initiatePayment(User user, double amount, String currency, String method, PaymentProvider paymentProvider);
-    void handleWebhook(String provider, String rawBody, Map<String, String> queryParams);
+    PaymentInitiationResponse initiatePayment(User user, double amount, String currency, String method,
+                                              PaymentProvider paymentProvider, String purchaseType,
+                                              Integer coinPackSize, String tier);    void handleWebhook(String provider, String rawBody, Map<String, String> queryParams);
 }
