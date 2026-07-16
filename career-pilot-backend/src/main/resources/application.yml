@@ -30,6 +30,23 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+  ai:
+    chat:
+      client:
+        enabled: true
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${OLLAMA_MODEL:llama3}
+          temperature: ${LLM_TEMPERATURE:0.4}
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai}
+      api-key: ${LLM_API_KEY:}
+      chat:
+        options:
+          model: ${LLM_MODEL:gemini-3.1-flash-lite}
+          temperature: ${LLM_TEMPERATURE:0.4}
 
   data:
     redis:
@@ -112,8 +129,7 @@ management:
 
 logging:
   level:
-    org.springframework.security.oauth2: DEBUG
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.security.oauth2.client: DEBUG
+    org.springframework.security: WARN
+    org.springframework.web: WARN
+    com.careerpilot: INFO
 

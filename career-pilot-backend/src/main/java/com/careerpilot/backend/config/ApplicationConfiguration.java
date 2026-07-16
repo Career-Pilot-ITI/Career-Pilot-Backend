@@ -3,6 +3,8 @@ package com.careerpilot.backend.config;
 import com.careerpilot.backend.repository.IUserRepository;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -65,5 +67,9 @@ public class ApplicationConfiguration {
     @Bean
     RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+    @Bean 
+    ChatClient chatClient(ChatClient.Builder builder){
+      return builder.defaultSystem("You are Career Pilot AI, an interview preparation assistant. Respond only with the exact JSON format requested.").build();
     }
 }
