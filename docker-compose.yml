@@ -39,7 +39,7 @@ services:
     container_name: career-pilot-api
     restart: unless-stopped
     ports:
-      - "7070:8080"
+      - "8080:8080"
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-career_pilot}
       DB_USERNAME: ${DB_USERNAME:-career_pilot}
