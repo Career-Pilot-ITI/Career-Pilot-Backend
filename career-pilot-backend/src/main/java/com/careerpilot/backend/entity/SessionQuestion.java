@@ -1,11 +1,19 @@
 package com.careerpilot.backend.entity;
+
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-
 @Entity
 @Table(name = "session_questions")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class SessionQuestion {
 
     @Id
@@ -27,10 +35,26 @@ public class SessionQuestion {
     private Integer questionOrder;    // 1, 2, 3...
 
     @Column(name = "user_transcript", columnDefinition = "TEXT")
-    private String userTranscript;    // ما اللي قال المستخدم
+    private String userTranscript;    // The STT text from mobile
 
     @Column(name = "audio_url")
-    private String audioUrl;          // S3 URL للصوت
+    private String audioUrl;          // null — audio not stored
+
+    @Column(name = "duration_ms")
+    private Long durationMs;          // total answer duration in milliseconds
+
+    @Column(name = "word_timings_json", columnDefinition = "TEXT")
+    private String wordTimingsJson;   // JSON array of WordTiming objects
+
+    // Pacing metrics computed server-side
+    @Column(name = "speech_rate_wpm")
+    private Double speechRateWpm;     // words per minute
+
+    @Column(name = "avg_pause_ms")
+    private Double avgPauseMs;        // average pause between words (ms)
+
+    @Column(name = "silence_ratio")
+    private Double silenceRatio;      // total pause time / total duration
 
     @Column(name = "generated_by_llm")
     private Boolean generatedByLlm = true;
@@ -44,4 +68,9 @@ public class SessionQuestion {
     // Relationship
     @OneToOne(mappedBy = "sessionQuestion", cascade = CascadeType.ALL)
     private QuestionScore score;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }

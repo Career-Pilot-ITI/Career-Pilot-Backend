@@ -126,6 +126,10 @@ app:
     api-key: ${WIREWEB_API_KEY:}
     session-id: ${WIREWEB_SESSION_ID:}
     base-url: ${WIREWEB_BASE_URL:https://app.wireweb.co.in}
+  llm:
+    api-key: ${GEMINI_API_KEY:}            # Google Gemini API key — leave empty to use heuristic fallback
+    model: ${GEMINI_MODEL:gemini-1.5-flash} # Gemini model to use for answer scoring
+    enabled: ${LLM_ENABLED:false}           # Set to true when GEMINI_API_KEY is configured
 management:
   health:
     mail:
