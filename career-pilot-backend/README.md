@@ -73,7 +73,7 @@ OLLAMA_MODEL=llama3
 ## `.env` reference
 
 | Variable | Required | Default | What it does |
-|---|---|---|---|---|
+---|---|---|---|---|
 | `DB_PASSWORD` | ✅ | — | PostgreSQL password |
 | `JWT_SECRET` | ✅ | — | 256-bit Base64 key (run `python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"`) |
 | `OTP_PROVIDER` | ❌ | `simulated` | `simulated` or `wireweb` |
