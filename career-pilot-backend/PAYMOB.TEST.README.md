@@ -1,76 +1,45 @@
 # Testing Paymob Payments — Developer Setup Guide
 
-This guide walks through everything needed to test the Paymob payment integration locally, from fixing known blockers to confirming a webhook lands correctly.
+This guide walks through everything needed to test the Paymob payment integration locally, from creating a Paymob account through to confirming a webhook lands correctly and a transaction shows up in history.
 
 ---
 
 ## 0. Prerequisites
 
 - Docker + Docker Compose installed
-- A Paymob merchant account (free to create): https://portal.paymob.com
-- ngrok installed and authenticated (see Step 4)
+- ngrok installed and authenticated (see Step 6)
+- A Paymob merchant account — if you don't have one, Step 1 below walks through creating it
 
 ---
 
-## 1. Fix the two code blockers
+## 1. Create a Paymob account and complete onboarding
 
-These must be fixed before the app will even start or before webhooks will work. If someone else already fixed these, skip to Step 2.
+Even for test-mode-only development, Paymob requires an account and a short onboarding flow before it gives you API credentials.
 
-### 1a. Missing `updated_at` column
+1. Go to https://portal.paymob.com and click **Sign Up**.
+2. Fill in your business/merchant details. For local development this can be minimal — you don't need a fully verified live business to use **Test Mode**.
+3. Verify your email/phone if prompted.
+4. Once logged in, you'll land on the merchant dashboard. In the **top-left corner**, toggle **Test Mode** on. This is what unlocks test-only credentials and test integrations, without needing live business verification or real payment processing approval.
+5. Paymob may prompt you to complete additional onboarding steps (business category, expected transaction volume, etc.) before some sections unlock. For test mode, you can usually reach API keys and integrations without finishing every step — if something is greyed out, check whether an onboarding prompt is blocking it.
 
-`PaymentTransaction.java` has an `updatedAt` field mapped to a `updated_at` column, but the schema doesn't have it yet. With `hibernate.ddl-auto: validate` in `application.yml`, the app will refuse to start until this exists.
-
-Add a new migration file — **do not edit `V2` if it has already run**:
-
-```sql
--- src/main/resources/db/migration/V3__add_updated_at.sql
-ALTER TABLE payment_transactions ADD COLUMN updated_at TIMESTAMP;
-```
-
-### 1b. Enum comparison bug in webhook handler
-
-In `PaymentServiceImpl.handleWebhook`, this line silently no-ops on every webhook because it compares an enum to a `String`:
-
-```java
-// Before (broken):
-if (!"PENDING".equals(tx.getStatus())) {
-    return;
-}
-```
-
-Fix:
-
-```java
-import static com.careerpilot.backend.entity.ENUMs.PaymentStatus.PENDING;
-// ...
-if (tx.getStatus() != PENDING) {
-    return;
-}
-```
-
-Without this fix, every transaction stays `PENDING` forever and nothing throws an error — it just looks like the webhook isn't doing anything.
+You do not need to wait for Paymob's live-account approval/verification process to start integrating — test mode is fully self-serve.
 
 ---
 
-## 2. Fix `application.yml`
+## 2. Get your credentials from the dashboard
 
-The `paymob:` block must sit at the **top level** of the file (same indentation as `spring:`, `security:`, `app:`) — not nested under `spring:`. `@ConfigurationProperties(prefix = "paymob")` only looks for a top-level `paymob` key.
+1. **Test Mode** must be toggled on (top-left) — confirms every credential you copy from here on is a test credential, not a live one.
+2. **Secret key / Public key** — go to **Settings → Developers** (or **API Keys**, depending on current dashboard labeling). Copy the **test-mode** versions of both.
+3. **HMAC secret** — same Developers area, usually listed alongside webhook/callback settings.
+4. **Integration ID (card)** — go to **Settings → Payment Integrations**. Test mode auto-provisions a card integration for you; open it and copy the numeric ID shown in the URL/page header (e.g. `Integration #5778473` → `5778473`).
+5. **Test card numbers** — search Paymob's docs for their **"Test Credentials"** / **"Test Cards"** page. It publishes fixed numbers that reliably simulate success and decline outcomes.
 
-```yaml
-paymob:
-  base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com}
-  secret-key: ${PAYMOB_SECRET_KEY}
-  public-key: ${PAYMOB_PUBLIC_KEY}
-  hmac-secret: ${PAYMOB_HMAC_SECRET}
-  notification-url: ${PAYMOB_NOTIFICATION_URL}
-  redirection-url: ${PAYMOB_REDIRECTION_URL:http://localhost:5173/payment/result}
-  integration-ids:
-    card: ${PAYMOB_INTEGRATION_ID_CARD}
-```
+> Do **not** edit the "Webhook URL" / "Redirect URL" fields shown on the integration detail page in the dashboard — those are Paymob's own internal defaults for that integration, unrelated to your app's `PAYMOB_NOTIFICATION_URL` / `PAYMOB_REDIRECTION_URL`. Your app sends its own callback URLs dynamically with each payment intention request.
 
-**Note:** only list an integration method (`card`, `wallet`, etc.) in `integration-ids` once you actually have a real numeric ID for it. Don't give an unused method an empty-string default (e.g. `${PAYMOB_INTEGRATION_ID_WALLET:-}`) — that field binds to `Integer` and Spring will crash trying to parse an empty string. Leave unused methods out of the map entirely.
+> Menu labels shift around in Paymob's dashboard occasionally — treat "Developers" / "Payment Integrations" as the general area to look in, not an exact click path.
 
 ---
+
 
 ## 3. Add environment variables to `docker-compose.yml`
 
@@ -86,13 +55,16 @@ Under the `backend` service's `environment:` block:
       PAYMOB_INTEGRATION_ID_CARD: ${PAYMOB_INTEGRATION_ID_CARD:?err}
 ```
 
-Add a `PAYMOB_INTEGRATION_ID_WALLET` line (and its `application.yml` counterpart) only once wallet support is actually needed.
+> **Run `docker compose` commands from the same directory as `docker-compose.yml` and `.env`.** Running from a subdirectory (e.g. the inner backend project folder) can cause Compose to silently miss your `.env` file, leaving vars like `PAYMOB_SECRET_KEY` empty inside the container even though the app appears to start fine. Verify anytime with:
+> ```powershell
+> docker exec -it career-pilot-api env | grep PAYMOB_SECRET_KEY
+> ```
 
 ---
 
 ## 4. Install and authenticate ngrok
 
-Paymob needs to reach your local machine over the public internet to deliver webhooks. ngrok creates a temporary public URL that tunnels to `localhost:8080`.
+Paymob needs to reach your local machine over the public internet to deliver webhooks.
 
 **Install (pick one):**
 ```powershell
@@ -112,22 +84,7 @@ winget install ngrok.ngrok
 
 ---
 
-## 5. Get test credentials from the Paymob dashboard
-
-1. Log into https://portal.paymob.com (create a merchant account if needed).
-2. Turn on **Test Mode** (toggle, top-left of the dashboard). This gives you test-only credentials — no real money moves.
-3. **Secret key / Public key** — Settings → Developers / API Keys (test-mode versions).
-4. **HMAC secret** — same Developers area, near webhook/callback settings.
-5. **Integration ID (card)** — Settings → Payment Integrations. Test mode auto-provisions a card integration; open it and copy the numeric ID from the URL/page (e.g. `Integration #5778473` → `5778473`).
-6. **Test card numbers** — see Paymob's docs "Test Credentials" page for numbers that reliably simulate success/decline.
-
-> Do **not** edit the "Webhook URL" / "Redirect URL" fields shown on the integration detail page in the dashboard — those are Paymob's own internal defaults for that integration, unrelated to your app's `PAYMOB_NOTIFICATION_URL` / `PAYMOB_REDIRECTION_URL`. Your app sends its own callback URLs dynamically with each payment intention request.
-
----
-
-## 6. Fill in `.env`
-
-Create/update the root `.env` file (same one with `DB_PASSWORD`, `JWT_SECRET`, etc.):
+## 5. Fill in `.env`
 
 ```
 PAYMOB_BASE_URL=https://accept.paymob.com
@@ -141,15 +98,17 @@ PAYMOB_NOTIFICATION_URL=   # filled in next step
 
 ---
 
-## 7. Start ngrok and set the notification URL
+## 6. Start ngrok and set the notification URL
 
 ```powershell
-ngrok http 8080
+ngrok http <backend host port>
 ```
+
+> Check the actual host port your backend is mapped to first — `docker ps` shows the real mapping (e.g. `0.0.0.0:7070->8080/tcp`), which may differ from the container-internal port in `docker-compose.yml`.
 
 Copy the forwarding URL it prints, e.g.:
 ```
-Forwarding   https://a1b2c3d4.ngrok-free.app -> http://localhost:8080
+Forwarding   https://a1b2c3d4.ngrok-free.app -> http://localhost:7070
 ```
 
 Set in `.env`:
@@ -157,23 +116,25 @@ Set in `.env`:
 PAYMOB_NOTIFICATION_URL=https://a1b2c3d4.ngrok-free.app/api/v1/payments/webhook/paymob
 ```
 
-> Free ngrok plans generate a new subdomain every restart — update this value (and restart the backend) each time you restart ngrok.
+> Free ngrok plans generate a new subdomain every restart unless you have a reserved static domain — update this value (and restart the backend) each time the ngrok URL changes.
 
 ---
 
-## 8. Run the app
+## 7. Run the app
 
 ```powershell
 docker compose up --build
 ```
 
+Always use `--build` after any code or config change — a plain `up` or `restart` reuses the existing image and will not pick up your edits.
+
 Flyway applies migrations automatically on boot (`flyway.enabled: true`).
 
 ---
 
-## 9. Test the full flow
+## 8. Test the full flow
 
-1. **Register/log in** a test user via `/api/v1/auth/**` to get a Bearer token.
+1. **Register/log in** a test user via `/api/v1/auth/**` (or `/api/v1/otp/**`) to get a Bearer token.
 2. **Initiate a payment:**
    ```
    POST /api/v1/payments/initiate
@@ -183,19 +144,30 @@ Flyway applies migrations automatically on boot (`flyway.enabled: true`).
    {
      "amount": 10,
      "currency": "EGP",
-     "method": "card"
+     "method": "card",
+     "provider": "PAYMOB",
+     "purchaseType": "COIN_PACK",
+     "coinPackSize": 500
    }
    ```
+   (Use `"purchaseType": "SUBSCRIPTION"` with a `"tier"` field instead of `coinPackSize` for a subscription purchase.)
+
    Response includes a `checkoutUrl`.
 3. **Open `checkoutUrl`** in a browser and complete payment using a Paymob test card number.
-4. **Watch the webhook arrive** — open `http://127.0.0.1:4040` (ngrok's local inspector) to see the request hit your backend in real time. Confirms the HMAC check passes and the payload shape matches what `PaymobPaymentProvider` expects.
+4. **Watch the webhook arrive** — open `http://127.0.0.1:4040` (ngrok's local inspector) to see the request hit your backend in real time.
 5. **Check the database:**
    ```bash
    docker exec -it career-pilot-db psql -U career_pilot -d career_pilot -c \
-     "select id, status, provider_transaction_id, merchant_order_id from payment_transactions order by id desc limit 5;"
+     "select id, status, provider_transaction_id, merchant_order_id, failure_reason from payment_transactions order by id desc limit 5;"
    ```
-   Confirm the row flipped from `PENDING` to `CONFIRMED`.
-6. **Test a declined test card too** — not just a successful one. This is the path where the enum bug (Step 1b) would have silently hidden a failure, just less obviously than the success path.
+   Confirm the row flipped from `PENDING` to `CONFIRMED` (or `FAILED` with a real failure reason for a declined card).
+6. **Check transaction history:**
+   ```
+   GET /api/v1/payments/history?page=0&size=10
+   Authorization: Bearer <token>
+   ```
+   Should return a paginated list of your own transactions only.
+7. **Test a declined test card too** — confirms the failure path records a real reason, not just a generic message.
 
 ---
 
@@ -203,10 +175,14 @@ Flyway applies migrations automatically on boot (`flyway.enabled: true`).
 
 | Symptom | Likely cause |
 |---|---|
-| App won't start, Hibernate validation error | Missing `updated_at` column — see Step 1a |
-| Webhook hits ngrok inspector but DB never updates | Enum bug (Step 1b) not fixed, or HMAC check failing |
+| App won't start, Hibernate validation error | Missing `updated_at` column — see Step 3a |
+| Webhook hits ngrok inspector but DB never updates | Enum bug (Step 3b) not fixed, or HMAC check failing |
 | `PaymobConfig` fields are all `null` at runtime | `paymob:` block still nested under `spring:` in `application.yml` |
 | YAML parse error on boot | Leftover `.properties`-style lines (`KEY=value`) in `application.yml` — must be `key: value` |
 | `NoSuchBeanDefinitionException: No qualifying bean of type RestTemplate` | Add a `RestTemplate` `@Bean` in `ApplicationConfiguration.java` |
 | `docker compose up` fails immediately, unrelated to Paymob | Check for other `:?err` env vars (e.g. `GOOGLE_CLIENT_ID`, `MAIL_USERNAME`) that may be unset in `.env` |
 | Webhook never reaches backend at all | `PAYMOB_NOTIFICATION_URL` uses a stale ngrok URL from a previous session — restart ngrok and update `.env` |
+| `env \| grep PAYMOB_SECRET_KEY` returns nothing inside the container | You're likely running `docker compose` from the wrong directory (missing `.env`) — `cd` to the folder containing `docker-compose.yml` and rebuild |
+| Paymob returns a blank `401 Unauthorized` on every intention request | Secret key isn't reaching the container (see above), or it's stale/regenerated in the dashboard — recheck both |
+| `/history` (or any endpoint returning `PaymentTransaction` directly) returns a huge, repeating JSON blob | Bidirectional JPA relationship (`User` <-> `UserRole`) causing infinite recursion — return a DTO (`PaymentTransactionResponse`) instead of the raw entity |
+| Validation errors or webhook rejections return `500` instead of `400`/`401` | Check `@ControllerAdvice` ordering — a catch-all `Exception.class` handler in one class can intercept exceptions meant for a more specific handler in another. Give domain-specific handlers an explicit `@Order(0)` and the true fallback handler `@Order(Ordered.LOWEST_PRECEDENCE)` |

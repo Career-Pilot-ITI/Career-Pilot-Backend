@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 @Table(name = "payment_transactions")
 @Setter
 @Getter
-@Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
