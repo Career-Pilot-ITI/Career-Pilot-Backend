@@ -57,13 +57,7 @@ services:
       WIREWEB_API_KEY: ${WIREWEB_API_KEY:-}
       WIREWEB_SESSION_ID: ${WIREWEB_SESSION_ID:-}
       WIREWEB_BASE_URL: ${WIREWEB_BASE_URL:-https://app.wireweb.co.in}
-      PAYMOB_BASE_URL: ${PAYMOB_BASE_URL:-https://accept.paymob.com}
-      PAYMOB_SECRET_KEY: ${PAYMOB_SECRET_KEY:?err}
-      PAYMOB_PUBLIC_KEY: ${PAYMOB_PUBLIC_KEY:?err}
-      PAYMOB_HMAC_SECRET: ${PAYMOB_HMAC_SECRET:?err}
-      PAYMOB_NOTIFICATION_URL: ${PAYMOB_NOTIFICATION_URL:?err}
-      PAYMOB_REDIRECTION_URL: ${PAYMOB_REDIRECTION_URL:-http://localhost:5173/payment/result}
-      PAYMOB_INTEGRATION_ID_CARD: ${PAYMOB_INTEGRATION_ID_CARD:?err}
+
       # LLM — Ollama on host, or set these in .env for OpenAI cloud
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen:latest}
