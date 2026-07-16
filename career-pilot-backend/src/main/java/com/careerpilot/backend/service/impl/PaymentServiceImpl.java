@@ -81,7 +81,7 @@ public class PaymentServiceImpl implements IPaymentService {
         tx.setProviderTransactionId(event.getProviderTransactionId());
         tx.setRawWebhookPayload(event.getRawPayload());
         if (!event.isSuccess()) {
-            tx.setFailureReason("Declined by provider");
+            tx.setFailureReason(event.getFailureReason());
         }
         tx.setConfirmedAt(LocalDateTime.now());
         transactionRepository.save(tx);
