@@ -75,7 +75,11 @@ paymob:
   redirection-url: ${PAYMOB_REDIRECTION_URL:http://localhost:5173/payment/result}
   integration-ids:
     card: ${PAYMOB_INTEGRATION_ID_CARD:0}
-
+coin-packs:
+  prices:
+    100: 20.0
+    500: 90.0
+    1000: 170.0
 security:
   jwt:
     secret-key: ${JWT_SECRET}
@@ -130,6 +134,6 @@ management:
 logging:
   level:
     org.springframework.security: WARN
-    org.springframework.web: WARN
+    org.springframework.web: DEBUG
     com.careerpilot: INFO
 

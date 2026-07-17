@@ -8,6 +8,7 @@ import com.careerpilot.backend.dto.payment.PaymentInitiationResult;
 import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
 import com.careerpilot.backend.entity.PaymentTransaction;
 import com.careerpilot.backend.entity.User;
+import com.careerpilot.backend.service.ICoinWalletService;
 import com.careerpilot.backend.service.IPaymentProvider;
 import com.careerpilot.backend.service.IPaymentService;
 import com.careerpilot.backend.service.IPaymentTransactionService;
@@ -26,6 +27,7 @@ public class PaymentServiceImpl implements IPaymentService {
 
     private final PaymentProviderResolver providerResolver;
     private final IPaymentTransactionService transactionService;
+    private final ICoinWalletService coinWalletService;
 
     @Override
     @Transactional
@@ -69,7 +71,10 @@ public class PaymentServiceImpl implements IPaymentService {
 
         if (event.isSuccess()) {
             transactionService.markConfirmed(tx, event.getProviderTransactionId(), event.getRawPayload());
-            // TODO: credit coin_wallets or activate subscription
+            if (tx.getCoinPackSize() != null) {
+                coinWalletService.credit(tx.getUser().getId(), tx.getCoinPackSize());
+            }
+            // TODO: subscription activation still pending SubscriptionService
         } else {
             transactionService.markFailed(tx, event.getProviderTransactionId(), event.getRawPayload(), event.getFailureReason());
         }

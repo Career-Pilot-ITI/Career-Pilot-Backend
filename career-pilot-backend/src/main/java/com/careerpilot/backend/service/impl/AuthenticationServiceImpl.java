@@ -27,6 +27,7 @@ import com.careerpilot.backend.security.jwt.JwtService;
 import com.careerpilot.backend.security.jwt.RefreshTokenService;
 import com.careerpilot.backend.security.jwt.TokenBlacklistService;
 import com.careerpilot.backend.service.IAuthentication;
+import com.careerpilot.backend.service.ICoinWalletService;
 import com.careerpilot.backend.service.IOtpService;
 import com.careerpilot.backend.utils.IEmailService;
 import jakarta.mail.MessagingException;
@@ -65,6 +66,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   private final IUserSkillRepository iUserSkillRepository;
   private final IUserFileRepository iUserFileRepository;
   private final EntityManager entityManager;
+  private final ICoinWalletService coinWalletService;
   private User user;
 
   @Override
@@ -109,6 +111,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
 
       user.getUserRoles().add(userRole);
       iUserRepository.save(user);
+      coinWalletService.createWalletForUser(user);
     }
 
     UserProfile profile = iUserProfileRepository.findByUserId(user.getId()).orElse(null);
