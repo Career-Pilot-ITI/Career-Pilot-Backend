@@ -12,7 +12,8 @@ import java.util.List;
 
 /**
  * Request body for POST /api/v1/interviews/sessions/{id}/questions/{qId}/answer
- * Contains transcript + word timings from mobile STT, no audio file needed.
+ * Contains transcript + word timings from mobile STT.
+ * audioUrl is reserved for future audio-based scoring.
  */
 @Data
 @NoArgsConstructor
@@ -25,6 +26,8 @@ public class SubmitAnswerRequest {
     @NotNull(message = "Duration is required")
     @Min(value = 0, message = "Duration must be non-negative")
     private Long durationMs;
+
+    private String audioUrl;  // S3/CDN URL — null until audio scoring lands
 
     @Valid
     private List<WordTimingDto> words;

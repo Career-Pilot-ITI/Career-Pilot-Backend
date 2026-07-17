@@ -1,44 +1,42 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.dto.request.StartSessionRequest;
+import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.InterviewSession;
-import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IInterviewSessionRepository;
-import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.repository.IUserRepository;
 import com.careerpilot.backend.service.IInterviewSessionService;
+import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
+import com.careerpilot.backend.service.ISessionQuestionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class InterviewSessionService implements IInterviewSessionService {
 
-    private static final int MAX_QUESTIONS_PER_SESSION = 5;
-
     private final IInterviewSessionRepository sessionRepository;
     private final ISessionQuestionRepository sessionQuestionRepository;
-    private final IQuestionBankRepository questionBankRepository;
     private final ITrackRepository trackRepository;
     private final IUserRepository userRepository;
+    private final ILlmService llmService;
+    private final ISessionQuestionService sessionQuestionService;
     private final IQuestionScoreService scoreService;
 
     @Override
@@ -54,15 +52,7 @@ public class InterviewSessionService implements IInterviewSessionService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
-        // 3. Pick questions — up to MAX_QUESTIONS_PER_SESSION active questions, shuffled
-        List<QuestionBank> pool = questionBankRepository.findByTrackIdAndIsActiveTrue(request.getTrackId());
-        if (pool.isEmpty()) {
-            throw new RuntimeException("No active questions found for track: " + track.getName());
-        }
-        Collections.shuffle(pool);
-        List<QuestionBank> selected = pool.subList(0, Math.min(MAX_QUESTIONS_PER_SESSION, pool.size()));
-
-        // 4. Create the session
+        // 3. Create the session
         InterviewSession session = InterviewSession.builder()
                 .user(user)
                 .track(track)
@@ -72,24 +62,18 @@ public class InterviewSessionService implements IInterviewSessionService {
         session = sessionRepository.save(session);
         log.info("Created session ID: {} for user: {}", session.getId(), userId);
 
-        // 5. Create ordered SessionQuestion entries
-        final InterviewSession savedSession = session;
-        List<SessionQuestion> sessionQuestions = IntStream.range(0, selected.size())
-                .mapToObj(i -> {
-                    QuestionBank q = selected.get(i);
-                    return SessionQuestion.builder()
-                            .session(savedSession)
-                            .question(q)
-                            .questionText(q.getQuestionText())
-                            .questionOrder(i + 1)
-                            .build();
-                })
-                .collect(Collectors.toList());
+        // 4. Generate questions via LLM
+        List<GeneratedQuestion> generated = llmService.generateQuestions(
+                request.getTrackId(), request.getQuestionCount());
+        if (generated == null || generated.isEmpty()) {
+            throw new RuntimeException("Failed to generate questions for track: " + track.getName());
+        }
+        log.info("Generated {} questions via LLM for session ID: {}", generated.size(), session.getId());
 
-        sessionQuestionRepository.saveAll(sessionQuestions);
-        log.info("Attached {} questions to session ID: {}", sessionQuestions.size(), savedSession.getId());
+        // 5. Delegate SessionQuestion creation to SessionQuestionService
+        List<SessionQuestion> sessionQuestions = sessionQuestionService.createSessionQuestions(session, generated);
 
-        return mapToResponse(savedSession, sessionQuestions);
+        return mapToResponse(session, sessionQuestions);
     }
 
     @Override

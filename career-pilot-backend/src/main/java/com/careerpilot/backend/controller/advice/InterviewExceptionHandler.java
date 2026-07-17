@@ -14,23 +14,10 @@ import java.time.LocalDateTime;
 @Slf4j
 public class InterviewExceptionHandler {
 
-
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse> handleIllegalState(IllegalStateException ex) {
         log.warn("Interview operation conflict: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiResponse.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .timestamp(LocalDateTime.now())
-                        .build());
-    }
-
-
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ApiResponse> handleRuntimeException(RuntimeException ex) {
-        log.warn("Interview resource not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.builder()
                         .success(false)
                         .message(ex.getMessage())

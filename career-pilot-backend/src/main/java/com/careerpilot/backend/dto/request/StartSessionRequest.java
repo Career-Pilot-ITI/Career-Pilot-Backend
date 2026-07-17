@@ -1,7 +1,10 @@
 package com.careerpilot.backend.dto.request;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -11,8 +14,14 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class StartSessionRequest {
 
     @NotNull(message = "trackId is required")
     private Long trackId;
+
+    @Min(value = 1, message = "questionCount must be at least 1")
+    @Max(value = 20, message = "questionCount must not exceed 20")
+    @Builder.Default
+    private Integer questionCount = 5;
 }

@@ -16,12 +16,4 @@ public interface ISessionQuestionRepository extends JpaRepository<SessionQuestio
 
     Optional<SessionQuestion> findByIdAndSessionId(Long id, Long sessionId);
 
-    @Query("SELECT COUNT(sq) FROM SessionQuestion sq WHERE sq.session.id = :sessionId")
-    int countBySessionId(@Param("sessionId") Long sessionId);
-
-    @Query("SELECT COUNT(sq) FROM SessionQuestion sq WHERE sq.session.id = :sessionId AND sq.completedAt IS NOT NULL")
-    int countAnsweredBySessionId(@Param("sessionId") Long sessionId);
-
-    @Query("SELECT COALESCE(MAX(sq.questionOrder), 0) FROM SessionQuestion sq WHERE sq.session.id = :sessionId")
-    int findMaxOrderBySessionId(@Param("sessionId") Long sessionId);
 }

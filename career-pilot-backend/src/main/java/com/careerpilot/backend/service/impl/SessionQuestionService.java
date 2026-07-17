@@ -1,12 +1,15 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
+import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.InterviewSession;
+import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.repository.IInterviewSessionRepository;
+import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.careerpilot.backend.service.IQuestionScoreService;
 import com.careerpilot.backend.service.ISessionQuestionService;
@@ -17,8 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -27,8 +32,34 @@ public class SessionQuestionService implements ISessionQuestionService {
 
     private final ISessionQuestionRepository questionRepository;
     private final IInterviewSessionRepository sessionRepository;
+    private final IQuestionBankRepository questionBankRepository;
     private final IQuestionScoreService scoreService;
     private final ObjectMapper objectMapper;
+
+    @Override
+    @Transactional
+    public List<SessionQuestion> createSessionQuestions(InterviewSession session, List<GeneratedQuestion> generated) {
+        log.info("Creating {} session questions for session ID: {}", generated.size(), session.getId());
+
+        List<SessionQuestion> sessionQuestions = IntStream.range(0, generated.size())
+                .mapToObj(i -> {
+                    GeneratedQuestion gq = generated.get(i);
+                    QuestionBank sourceQ = questionBankRepository.findById(gq.sourceQuestionId())
+                            .orElse(null);
+                    return SessionQuestion.builder()
+                            .session(session)
+                            .question(sourceQ)
+                            .questionText(gq.text())
+                            .questionOrder(i + 1)
+                            .generatedByLlm(true)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        List<SessionQuestion> saved = questionRepository.saveAll(sessionQuestions);
+        log.info("Created {} session questions for session ID: {}", saved.size(), session.getId());
+        return saved;
+    }
 
     @Override
     @Transactional
@@ -91,10 +122,11 @@ public class SessionQuestionService implements ISessionQuestionService {
             }
         }
 
-        // 7. Persist transcript + timings + pacing
+        // 7. Persist transcript + timings + pacing + audio ref
         sq.setUserTranscript(request.getTranscript());
         sq.setDurationMs(request.getDurationMs());
         sq.setWordTimingsJson(wordTimingsJson);
+        sq.setAudioUrl(request.getAudioUrl());
         sq.setSpeechRateWpm(speechRateWpm);
         sq.setAvgPauseMs(avgPauseMs);
         sq.setSilenceRatio(silenceRatio);

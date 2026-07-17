@@ -1,11 +1,23 @@
 package com.careerpilot.backend.service;
 
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
+import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
+import com.careerpilot.backend.entity.InterviewSession;
+import com.careerpilot.backend.entity.SessionQuestion;
 
 import java.util.List;
 
 public interface ISessionQuestionService {
+
+    /**
+     * Create SessionQuestion entries from LLM-generated questions for a session.
+     *
+     * @param session   the saved InterviewSession
+     * @param generated the LLM-generated questions (text + sourceQuestionId)
+     * @return the saved SessionQuestion entities
+     */
+    List<SessionQuestion> createSessionQuestions(InterviewSession session, List<GeneratedQuestion> generated);
 
     /**
      * Submit an answer for a session question.

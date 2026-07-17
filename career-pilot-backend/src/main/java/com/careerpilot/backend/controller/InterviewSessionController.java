@@ -42,7 +42,7 @@ public class InterviewSessionController {
     @PostMapping
     @Operation(
             summary = "Start an interview session",
-            description = "Creates a new IN_PROGRESS session for the given track and attaches up to 5 random active questions."
+            description = "Creates a new IN_PROGRESS session for the given track and generates {questionCount} LLM-powered interview questions."
     )
     public ResponseEntity<ApiResponse> startSession(@Valid @RequestBody StartSessionRequest request) {
         Long userId = getCurrentUserId();
