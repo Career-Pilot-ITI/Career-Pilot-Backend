@@ -1,37 +1,29 @@
 package com.careerpilot.backend.service.impl;
 
-import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
+import com.careerpilot.backend.dto.response.ScoreResponse;
 import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 /**
  * Scoring pipeline for interview answers.
  *
  * Pipeline:
- *   Mobile JSON (transcript + words[])
+ *   SessionQuestion (transcript + pre-computed pacing stored by SessionQuestionService)
  *     │
- *     ├─ Compute pacing (pure math):
- *     │    speechRate    = words.length / durationMs * 60000
- *     │    avgPause      = avg(startMs[i+1] - endMs[i])
- *     │    silenceRatio  = totalPauseMs / durationMs
- *     │    pacingScore   = map speechRate to 0-100 (optimal ~120-150 wpm)
+ *     ├─ Read pacing score from sq.speechRateWpm (already computed + saved — no re-parsing)
  *     │
- *     └─→ LlmService.scoreAnswer(question, transcript)
+ *     └─→ LlmService.scoreAnswer(questionId, userId, transcript)
  *          → {contentRelevance, clarity, confidence, fillerWords}
  *          │
- *          └─ overall = content(40%) + clarity(20%) + confidence(20%) + pacing(10%) + fillerWords(10%)
+ *          └─ overall = content(40%) + clarity(20%) + confidence(20%) + pacing(10%) + filler(10%)
  */
 @Service
 @RequiredArgsConstructor
@@ -43,7 +35,6 @@ public class QuestionScoreService implements IQuestionScoreService {
 
     private final IQuestionScoreRepository scoreRepository;
     private final ILlmService llmService;
-    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -56,17 +47,20 @@ public class QuestionScoreService implements IQuestionScoreService {
             return getScore(sessionQuestion.getId());
         }
 
-        // 1. Compute pacing score from word timings
+        // 1. Compute pacing score from the already-saved speechRateWpm field (no re-parsing)
         int pacingScore = computePacingScore(sessionQuestion);
-        log.debug("Computed pacing score: {} for question ID: {}", pacingScore, sessionQuestion.getId());
+        log.debug("Pacing score: {} for question ID: {}", pacingScore, sessionQuestion.getId());
 
-        // 2. Call LLM for text-based scores
-        ILlmService.LlmScoreResult llmResult = llmService.scoreAnswer(
-                sessionQuestion.getQuestionText(),
-                sessionQuestion.getUserTranscript()
-        );
+        // 2. Call LLM with questionId + userId so the impl can load RAG context
+        Long questionId = sessionQuestion.getQuestion() != null
+                ? sessionQuestion.getQuestion().getId() : null;
+        Long userId = sessionQuestion.getSession().getUser().getId();
+
+        ScoreResponse llmResult = llmService.scoreAnswer(questionId, userId,
+                sessionQuestion.getUserTranscript());
         log.debug("LLM scores — content:{}, clarity:{}, confidence:{}, filler:{}",
-                llmResult.contentRelevance(), llmResult.clarity(), llmResult.confidence(), llmResult.fillerWords());
+                llmResult.contentRelevance(), llmResult.clarity(),
+                llmResult.confidence(), llmResult.fillerWords());
 
         // 3. Build and save QuestionScore entity
         QuestionScore score = QuestionScore.builder()
@@ -76,7 +70,7 @@ public class QuestionScoreService implements IQuestionScoreService {
                 .confidence(llmResult.confidence())
                 .fillerWords(llmResult.fillerWords())
                 .pacing(pacingScore)
-                .overallScore(0)  // will be calculated below
+                .overallScore(0)  // calculated below
                 .build();
 
         score.calculateOverallScore();
@@ -97,49 +91,31 @@ public class QuestionScoreService implements IQuestionScoreService {
     // ---- Pacing computation ----
 
     /**
-     * Compute pacing score 0-100 from word timestamps.
-     * Optimal speech rate is ~110–160 wpm → score 100.
-     * Too fast (>200 wpm) or too slow (<60 wpm) → score approaches 0.
+     * Compute pacing score 0-100 from the pre-computed speechRateWpm saved on SessionQuestion.
+     * SessionQuestionService already did the arithmetic — we simply read the field here.
      *
-     * If no word timings are available, returns a neutral score of 50.
+     * Optimal speech rate: 110–160 wpm → score 100.
+     * Too fast (>250 wpm) or too slow (<30 wpm) → score approaches 0.
+     * Returns 50 if no speech rate data is available.
      */
     private int computePacingScore(SessionQuestion sq) {
-        if (sq.getWordTimingsJson() == null || sq.getWordTimingsJson().isBlank()
-                || sq.getDurationMs() == null || sq.getDurationMs() <= 0) {
-            return 50; // no timing data available
+        Double wpm = sq.getSpeechRateWpm();
+        if (wpm == null || wpm <= 0) {
+            return 50; // no timing data — neutral default
         }
 
-        try {
-            List<SubmitAnswerRequest.WordTimingDto> words = objectMapper.readValue(
-                    sq.getWordTimingsJson(),
-                    new TypeReference<List<SubmitAnswerRequest.WordTimingDto>>() {}
-            );
-
-            if (words == null || words.isEmpty()) {
-                return 50;
-            }
-
-            double durationMinutes = sq.getDurationMs() / 60_000.0;
-            double speechRateWpm = words.size() / durationMinutes;
-
-            // Map to 0-100: parabola centered at optimal range
-            int score;
-            if (speechRateWpm >= OPTIMAL_WPM_LOW && speechRateWpm <= OPTIMAL_WPM_HIGH) {
-                score = 100;
-            } else if (speechRateWpm < OPTIMAL_WPM_LOW) {
-                // Too slow: linear drop from optimal to 0 at 30 wpm
-                score = (int) Math.max(0, 100 * (speechRateWpm - 30) / (OPTIMAL_WPM_LOW - 30));
-            } else {
-                // Too fast: linear drop from optimal to 0 at 250 wpm
-                score = (int) Math.max(0, 100 * (250 - speechRateWpm) / (250 - OPTIMAL_WPM_HIGH));
-            }
-
-            return Math.max(0, Math.min(100, score));
-
-        } catch (Exception e) {
-            log.warn("Failed to parse word timings for pacing score, using default. Error: {}", e.getMessage());
-            return 50;
+        int score;
+        if (wpm >= OPTIMAL_WPM_LOW && wpm <= OPTIMAL_WPM_HIGH) {
+            score = 100;
+        } else if (wpm < OPTIMAL_WPM_LOW) {
+            // Too slow: linear drop, 0 at 30 wpm
+            score = (int) Math.max(0, 100.0 * (wpm - 30) / (OPTIMAL_WPM_LOW - 30));
+        } else {
+            // Too fast: linear drop, 0 at 250 wpm
+            score = (int) Math.max(0, 100.0 * (250 - wpm) / (250 - OPTIMAL_WPM_HIGH));
         }
+
+        return Math.max(0, Math.min(100, score));
     }
 
     // ---- Mapper ----
