@@ -174,6 +174,9 @@ public class LlmServiceImpl implements ILlmService {
 
     @Override
     public CvAnalysis analyzeCv(String cvText) {
+        log.info("LLM analyzeCv - input text length: {} chars", cvText.length());
+        log.debug("LLM analyzeCv - input preview: {}...", cvText.substring(0, Math.min(cvText.length(), 300)));
+
         String prompt = """
                 Extract structured information from this CV text.
                 
@@ -183,6 +186,7 @@ public class LlmServiceImpl implements ILlmService {
                 {"skills": [], "yearsOfExperience": 0, "targetRole": "", "educationLevel": ""}
                 """.formatted(cvText);
 
+        log.info("LLM analyzeCv - sending request...");
         String response = chatClient.prompt()
                 .system(s -> s.text("""
                         You are an HR expert specializing in CV parsing and skills assessment.
@@ -193,10 +197,19 @@ public class LlmServiceImpl implements ILlmService {
                 .call()
                 .content();
 
+        log.info("LLM analyzeCv - raw response length: {} chars", response != null ? response.length() : 0);
+        log.info("LLM analyzeCv - raw response: {}", response);
+
+        String stripped = stripMarkdown(response);
+        log.info("LLM analyzeCv - stripped: {}", stripped);
+
         try {
-            return objectMapper.readValue(stripMarkdown(response), CvAnalysis.class);
+            CvAnalysis result = objectMapper.readValue(stripped, CvAnalysis.class);
+            log.info("LLM analyzeCv - parsed OK: skills={}, targetRole={}, years={}, education={}",
+                result.skills(), result.targetRole(), result.yearsOfExperience(), result.educationLevel());
+            return result;
         } catch (Exception e) {
-            log.warn("Failed to parse CV analysis response: {}", response, e);
+            log.warn("LLM analyzeCv - FAILED to parse response: {}", response, e);
             return new CvAnalysis(List.of(), 0, "", "");
         }
     }

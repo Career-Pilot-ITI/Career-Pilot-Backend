@@ -144,26 +144,36 @@ public class UserProfileServiceImpl implements IUserProfileService {
   @Override
   @Transactional
   public UserProfileResponse analyzeCv(Long userId, MultipartFile file) {
+    log.info("=== CV ANALYZE START ===");
+    log.info("userId={}, file={}, size={}", userId, file.getOriginalFilename(), file.getSize());
+
     UserFileResponse fileResponse = fileUploadService.upload(file, "cvs", userId);
-    log.info("CV file uploaded: {}", fileResponse.getUrl());
+    log.info("Step 1 - File uploaded: id={}, url={}", fileResponse.getId(), fileResponse.getUrl());
 
     UserFile userFile = fileRepository.findById(fileResponse.getId())
         .orElseThrow(() -> new RuntimeException("File not found after upload"));
     String storedPath = userFile.getStoredPath();
     String relativePath = storedPath.replace("/api/v1/files/", "");
     Path absolutePath = Paths.get(uploadPath).toAbsolutePath().normalize().resolve(relativePath);
+    log.info("Step 2 - File path resolved: {}", absolutePath);
 
     String cvText;
     try {
       cvText = cvExtractionService.extractCv(absolutePath);
     } catch (IOException e) {
+      log.error("Step 3 - Tika extraction failed", e);
       throw new RuntimeException("Failed to extract text from CV file", e);
     }
-    log.info("CV text extracted: {} chars", cvText.length());
+    log.info("Step 3 - Tika extracted {} chars", cvText.length());
+    if (cvText.isBlank()) {
+      log.warn("Step 3 - CV text is empty — PDF may be scanned/image-based");
+      throw new RuntimeException("Could not extract text from CV. The file may be a scanned image. Please upload a text-based PDF or DOCX.");
+    }
 
+    log.info("Step 4 - Calling LLM analyzeCv...");
     CvAnalysis analysis = llmService.analyzeCv(cvText);
-    log.info("CV analyzed: {} skills, targetRole={}, years={}",
-        analysis.skills().size(), analysis.targetRole(), analysis.yearsOfExperience());
+    log.info("Step 4 - LLM returned: skills={}, targetRole={}, years={}, education={}",
+        analysis.skills(), analysis.targetRole(), analysis.yearsOfExperience(), analysis.educationLevel());
 
     UserProfile profile = profileRepository.findByUserId(userId)
         .orElseThrow(() -> new RuntimeException("User profile not found"));
@@ -183,6 +193,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
       saveSkills(userId, analysis.skills());
     }
 
+    log.info("=== CV ANALYZE DONE ===");
     return buildProfileResponse(profile, userId);
   }
 
