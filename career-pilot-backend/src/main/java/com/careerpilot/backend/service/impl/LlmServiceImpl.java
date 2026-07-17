@@ -174,19 +174,15 @@ public class LlmServiceImpl implements ILlmService {
 
     @Override
     public CvAnalysis analyzeCv(String cvText) {
-        log.info("LLM analyzeCv - input text length: {} chars", cvText.length());
-        log.debug("LLM analyzeCv - input preview: {}...", cvText.substring(0, Math.min(cvText.length(), 300)));
-
         String prompt = """
                 Extract structured information from this CV text.
                 
                 CV: %s
                 
                 Return ONLY raw JSON with no markdown formatting.
-                {"skills": [], "yearsOfExperience": 0, "targetRole": "", "educationLevel": ""}
+                {"skills": [], "yearsOfExperience": 0, "targetRole": "", "educationLevel": "", "displayName": "", "currentJobTitle": ""}
                 """.formatted(cvText);
 
-        log.info("LLM analyzeCv - sending request...");
         String response = chatClient.prompt()
                 .system(s -> s.text("""
                         You are an HR expert specializing in CV parsing and skills assessment.
@@ -197,20 +193,11 @@ public class LlmServiceImpl implements ILlmService {
                 .call()
                 .content();
 
-        log.info("LLM analyzeCv - raw response length: {} chars", response != null ? response.length() : 0);
-        log.info("LLM analyzeCv - raw response: {}", response);
-
-        String stripped = stripMarkdown(response);
-        log.info("LLM analyzeCv - stripped: {}", stripped);
-
         try {
-            CvAnalysis result = objectMapper.readValue(stripped, CvAnalysis.class);
-            log.info("LLM analyzeCv - parsed OK: skills={}, targetRole={}, years={}, education={}",
-                result.skills(), result.targetRole(), result.yearsOfExperience(), result.educationLevel());
-            return result;
+            return objectMapper.readValue(stripMarkdown(response), CvAnalysis.class);
         } catch (Exception e) {
-            log.warn("LLM analyzeCv - FAILED to parse response: {}", response, e);
-            return new CvAnalysis(List.of(), 0, "", "");
+            log.warn("Failed to parse CV analysis response: {}", response, e);
+            return new CvAnalysis();
         }
     }
 

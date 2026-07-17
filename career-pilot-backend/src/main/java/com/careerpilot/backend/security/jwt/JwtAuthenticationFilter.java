@@ -42,25 +42,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtService.extractAllClaims(jwt);
                 logger.info("JWT Claims: {}", claims);
 
+                if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+                    if (jwtService.isTokenValid(jwt, userDetails)) {
+                        Long userId = jwtService.extractUserId(jwt);
+                        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+                        authToken.setDetails(userId);
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                    }
+                }
             } catch (ExpiredJwtException e) {
                 logger.warn("Expired JWT token");
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token expirado");
                 return;
-            }catch (Exception e) {
+            } catch (Exception e) {
                 logger.error("Error processing the JWT token: {}", e.getMessage());
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Error al procesar el token");
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired. Please login again.");
                 return;
-            }
-
-            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-                if (jwtService.isTokenValid(jwt, userDetails)) {
-                    Long userId = jwtService.extractUserId(jwt);
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authToken.setDetails(userId);
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
             }
         }
         filterChain.doFilter(request, response);
