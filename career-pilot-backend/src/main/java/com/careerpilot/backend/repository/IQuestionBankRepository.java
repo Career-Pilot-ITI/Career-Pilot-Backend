@@ -30,4 +30,7 @@ public interface IQuestionBankRepository extends JpaRepository<QuestionBank, Lon
     // Search by text
     List<QuestionBank> findByQuestionTextContainingIgnoreCase(String text);
     Page<QuestionBank> findByQuestionTextContainingIgnoreCase(String text, Pageable pageable);
+
+    // Used by InterviewSessionService to pick active questions when starting a session
+    List<QuestionBank> findByTrackIdAndIsActiveTrue(Long trackId);
 }

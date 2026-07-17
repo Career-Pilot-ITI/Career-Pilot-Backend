@@ -126,6 +126,7 @@ app:
     api-key: ${WIREWEB_API_KEY:}
     session-id: ${WIREWEB_SESSION_ID:}
     base-url: ${WIREWEB_BASE_URL:https://app.wireweb.co.in}
+   
 management:
   health:
     mail:
