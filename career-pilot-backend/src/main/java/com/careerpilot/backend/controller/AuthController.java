@@ -6,7 +6,6 @@ import com.careerpilot.backend.controller.response.UserResponse;
 import com.careerpilot.backend.dto.LoginUserDto;
 import com.careerpilot.backend.dto.RegisterUserDto;
 import com.careerpilot.backend.dto.request.RefreshTokenRequest;
-import com.careerpilot.backend.dto.request.UpdateProfileRequest;
 import com.careerpilot.backend.dto.request.VerifyRequest;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.service.IAuthentication;
@@ -115,15 +114,6 @@ public class AuthController {
     public ResponseEntity<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         LoginResponse loginResponse = iAuthentication.refresh(request.getRefreshToken());
         return ResponseEntity.ok(loginResponse);
-    }
-
-    @PatchMapping("/profile")
-    @Operation(summary = "Update profile", description = "Update user profile fields, skills, and account settings. All fields are optional.")
-    public ResponseEntity<UserResponse> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        CustomUserDetails userDetails = (CustomUserDetails) auth.getPrincipal();
-        UserResponse response = iAuthentication.updateProfile(userDetails.getUser().getId(), request);
-        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")
