@@ -180,7 +180,7 @@ public class LlmServiceImpl implements ILlmService {
                 CV: %s
                 
                 Return ONLY raw JSON with no markdown formatting.
-                {"skills": [], "yearsOfExperience": 0, "targetRole": "", "educationLevel": ""}
+                {"skills": [], "yearsOfExperience": 0, "targetRole": "", "educationLevel": "", "displayName": "", "currentJobTitle": ""}
                 """.formatted(cvText);
 
         String response = chatClient.prompt()
@@ -197,7 +197,7 @@ public class LlmServiceImpl implements ILlmService {
             return objectMapper.readValue(stripMarkdown(response), CvAnalysis.class);
         } catch (Exception e) {
             log.warn("Failed to parse CV analysis response: {}", response, e);
-            return new CvAnalysis(List.of(), 0, "", "");
+            return new CvAnalysis();
         }
     }
 

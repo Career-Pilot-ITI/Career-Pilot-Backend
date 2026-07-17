@@ -4,34 +4,25 @@ import com.careerpilot.backend.controller.advice.AuthException;
 import com.careerpilot.backend.controller.response.AuthTokensResponse;
 import com.careerpilot.backend.controller.response.LoginResponse;
 import com.careerpilot.backend.controller.response.OtpAuthResponse;
+import com.careerpilot.backend.controller.response.UserProfileResponse;
 import com.careerpilot.backend.controller.response.UserResponse;
 import com.careerpilot.backend.dto.LoginUserDto;
 import com.careerpilot.backend.dto.RegisterUserDto;
-import com.careerpilot.backend.dto.request.UpdateProfileRequest;
 import com.careerpilot.backend.dto.request.VerifyOtpRequest;
 import com.careerpilot.backend.entity.Role;
-import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
-import com.careerpilot.backend.entity.UserFile;
-import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserRole;
-import com.careerpilot.backend.entity.UserSkill;
-import com.careerpilot.backend.entity.ENUMs.SkillCategory;
-import com.careerpilot.backend.repository.IUserFileRepository;
 import com.careerpilot.backend.repository.IRoleRepository;
-import com.careerpilot.backend.repository.IUserProfileRepository;
 import com.careerpilot.backend.repository.IUserRepository;
-import com.careerpilot.backend.repository.IUserSkillRepository;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.security.jwt.JwtService;
 import com.careerpilot.backend.security.jwt.RefreshTokenService;
 import com.careerpilot.backend.security.jwt.TokenBlacklistService;
 import com.careerpilot.backend.service.IAuthentication;
-import com.careerpilot.backend.service.ICoinWalletService;
 import com.careerpilot.backend.service.IOtpService;
+import com.careerpilot.backend.service.IUserProfileService;
 import com.careerpilot.backend.utils.IEmailService;
 import jakarta.mail.MessagingException;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -44,10 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
 import java.util.Random;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -62,11 +50,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
   private final TokenBlacklistService tokenBlacklistService;
   private final RefreshTokenService refreshTokenService;
   private final IOtpService otpService;
-  private final IUserProfileRepository iUserProfileRepository;
-  private final IUserSkillRepository iUserSkillRepository;
-  private final IUserFileRepository iUserFileRepository;
-  private final EntityManager entityManager;
-  private final ICoinWalletService coinWalletService;
+  private final IUserProfileService iUserProfileService;
   private User user;
 
   @Override
@@ -111,117 +95,27 @@ public class AuthenticationServiceImpl implements IAuthentication {
 
       user.getUserRoles().add(userRole);
       iUserRepository.save(user);
-      coinWalletService.createWalletForUser(user);
     }
 
-    UserProfile profile = iUserProfileRepository.findByUserId(user.getId()).orElse(null);
-    if (profile == null) {
-      profile = new UserProfile();
-      profile.setUser(user);
-      profile.setCreatedAt(LocalDateTime.now());
-      iUserProfileRepository.save(profile);
-    }
+    iUserProfileService.createDefaultProfile(user.getId());
+
+    UserResponse userResponse = new UserResponse();
+    userResponse.setId(user.getId());
+    userResponse.setPhoneNumber(user.getPhoneNumber());
+    userResponse.setNewUser(isNewUser);
+    userResponse.setProfile(iUserProfileService.getProfile(user.getId()));
 
     CustomUserDetails userDetails = new CustomUserDetails(user);
     String accessToken = jwtService.generateToken(userDetails);
     String refreshToken = refreshTokenService.generateRefreshToken(user.getUsername());
 
     AuthTokensResponse tokens = new AuthTokensResponse(accessToken, refreshToken, jwtService.getExpirationTime());
-    UserResponse userResponse = UserResponse.from(user, profile, isNewUser);
-    userResponse.getProfile().setSkills(getSkillNames(user.getId()));
     return new OtpAuthResponse(tokens, userResponse);
   }
 
   @Override
   public OtpAuthResponse verifyOtp(VerifyOtpRequest request) {
     return loginWithOtp(request.getPhoneNumber(), request.getCode());
-  }
-
-  @Override
-  @Transactional
-  public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
-    User user = iUserRepository.findById(userId)
-        .orElseThrow(() -> new AuthException.UserNotFoundException("User not found"));
-
-    if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
-      if (iUserRepository.findByUsername(request.getUsername()).isPresent()) {
-        throw new AuthException.UsernameAlreadyExistsException("Username already taken");
-      }
-      user.setUsername(request.getUsername());
-    }
-
-    if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
-      if (iUserRepository.findByEmail(request.getEmail()).isPresent()) {
-        throw new AuthException.UserAlreadyExistsException("Email already registered");
-      }
-      user.setEmail(request.getEmail());
-    }
-
-    if (request.getNewPassword() != null) {
-      if (user.getPassword() != null) {
-        if (request.getCurrentPassword() == null
-            || !passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-          throw new AuthException.UserNotFoundException("Current password is incorrect");
-        }
-      }
-      user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-    }
-
-    user.setUpdatedAt(LocalDateTime.now());
-    iUserRepository.save(user);
-
-    UserProfile profile = iUserProfileRepository.findByUserId(userId)
-        .orElseThrow(() -> new RuntimeException("User profile not found"));
-
-    if (request.getDisplayName() != null) profile.setDisplayName(request.getDisplayName());
-    if (request.getGender() != null) profile.setGender(request.getGender());
-    if (request.getDateOfBirth() != null) profile.setDateOfBirth(request.getDateOfBirth());
-    if (request.getTargetRole() != null) profile.setTargetRole(request.getTargetRole());
-    if (request.getIndustry() != null) profile.setIndustry(request.getIndustry());
-    if (request.getExperienceLevel() != null) profile.setExperienceLevel(request.getExperienceLevel());
-    if (request.getCurrentJobTitle() != null) profile.setCurrentJobTitle(request.getCurrentJobTitle());
-    if (request.getYearsOfExperience() != null) profile.setYearsOfExperience(request.getYearsOfExperience());
-
-    if (request.getAvatarFileId() != null) {
-        UserFile avatarFile = iUserFileRepository.findByIdAndUserId(request.getAvatarFileId(), userId)
-                .orElseThrow(() -> new AuthException.UserNotFoundException("Avatar file not found or does not belong to you"));
-        profile.setAvatarUrl(avatarFile.getStoredPath());
-    }
-    if (request.getCvFileId() != null) {
-        UserFile cvFile = iUserFileRepository.findByIdAndUserId(request.getCvFileId(), userId)
-                .orElseThrow(() -> new AuthException.UserNotFoundException("CV file not found or does not belong to you"));
-        profile.setCvUrl(cvFile.getStoredPath());
-    }
-    if (request.getTargetCompanies() != null)
-      profile.setTargetCompanies(String.join(",", request.getTargetCompanies()));
-    if (request.getEducationLevel() != null) profile.setEducationLevel(request.getEducationLevel());
-    if (request.getTimezone() != null) profile.setTimezone(request.getTimezone());
-    if (request.getTermsAccepted() != null) profile.setTermsAccepted(request.getTermsAccepted());
-    if (request.getSubscriptionTier() != null) profile.setSubscriptionTier(request.getSubscriptionTier());
-    if (request.getTrackId() != null) {
-      Track track = entityManager.find(Track.class, request.getTrackId());
-      if (track != null) profile.setTrack(track);
-    }
-    profile.setUpdatedAt(LocalDateTime.now());
-
-    iUserProfileRepository.save(profile);
-
-    if (request.getSkills() != null) {
-      iUserSkillRepository.deleteByUserId(userId);
-      for (String skillName : request.getSkills()) {
-        if (skillName == null || skillName.isBlank()) continue;
-        UserSkill skill = new UserSkill();
-        skill.setUser(user);
-        skill.setSkillName(skillName.trim());
-        skill.setCategory(SkillCategory.TECHNICAL);
-        skill.setCreatedAt(LocalDateTime.now());
-        iUserSkillRepository.save(skill);
-      }
-    }
-
-    UserResponse userResponse = UserResponse.from(user, profile, false);
-    userResponse.getProfile().setSkills(getSkillNames(userId));
-    return userResponse;
   }
 
   @Override
@@ -433,16 +327,6 @@ public class AuthenticationServiceImpl implements IAuthentication {
       return fullName.split(" ")[0];
     }
     return fullName;
-  }
-
-  private List<String> getSkillNames(Long userId) {
-    List<UserSkill> userSkills = iUserSkillRepository.findByUserId(userId);
-    if (userSkills == null || userSkills.isEmpty()) {
-      return Collections.emptyList();
-    }
-    return userSkills.stream()
-        .map(UserSkill::getSkillName)
-        .collect(Collectors.toList());
   }
 
   private User createOAuthUser(String name, String email) {

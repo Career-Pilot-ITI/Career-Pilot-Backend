@@ -58,7 +58,7 @@ CREATE TABLE user_profiles (
     cv_filename VARCHAR(255),
     cv_uploaded_at TIMESTAMP,
     target_companies TEXT,
-    education_level VARCHAR(20),
+    education_level VARCHAR(100),
     timezone VARCHAR(50),
     terms_accepted BOOLEAN DEFAULT FALSE,
     subscription_tier VARCHAR(50),
