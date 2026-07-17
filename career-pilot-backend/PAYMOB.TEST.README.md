@@ -41,7 +41,27 @@ You do not need to wait for Paymob's live-account approval/verification process 
 ---
 
 
-## 3. Add environment variables to `docker-compose.yml`
+## 4. `application.yml`
+
+The `paymob:` block must sit at the **top level** of the file (same indentation as `spring:`, `security:`, `app:`) — not nested under `spring:`. `@ConfigurationProperties(prefix = "paymob")` only binds a top-level `paymob` key.
+
+```yaml
+paymob:
+  base-url: ${PAYMOB_BASE_URL:https://accept.paymob.com}
+  secret-key: ${PAYMOB_SECRET_KEY}
+  public-key: ${PAYMOB_PUBLIC_KEY}
+  hmac-secret: ${PAYMOB_HMAC_SECRET}
+  notification-url: ${PAYMOB_NOTIFICATION_URL}
+  redirection-url: ${PAYMOB_REDIRECTION_URL:http://localhost:5173/payment/result}
+  integration-ids:
+    card: ${PAYMOB_INTEGRATION_ID_CARD}
+```
+
+Only list an integration method (`card`, `wallet`, etc.) once you have a real numeric ID for it. Don't give an unused method an empty-string default — that field binds to `Integer` and Spring will crash trying to parse an empty string.
+
+---
+
+## 5. Add environment variables to `docker-compose.yml`
 
 Under the `backend` service's `environment:` block:
 
@@ -62,9 +82,23 @@ Under the `backend` service's `environment:` block:
 
 ---
 
-## 4. Install and authenticate ngrok
+## 6. Install and authenticate a tunnel (ngrok or Cloudflare Tunnel)
 
 Paymob needs to reach your local machine over the public internet to deliver webhooks.
+
+> **Known issue: Paymob does not reliably call back to ngrok's free-tier `*.ngrok-free.app`/`*.ngrok-free.dev` domains.** In testing, payments completed successfully on Paymob's side (confirmed via the redirect page showing `success=true`) but the webhook never arrived at ngrok — not even a failed/rejected attempt showed in ngrok's inspector. Sending the same `notification_url` to `webhook.site` instead confirmed Paymob *does* attempt delivery promptly and correctly — the failure is specific to ngrok's free-tier domain, most likely blocklisted by Paymob's outbound callback service. **Recommendation: use Cloudflare Tunnel instead of ngrok for Paymob webhook testing.**
+
+### Option A (recommended): Cloudflare Tunnel
+
+```powershell
+winget install --id Cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:7070
+```
+No signup required for a quick/anonymous tunnel. Copy the printed `https://....trycloudflare.com` URL.
+
+> Like ngrok's free tier, a quick Cloudflare Tunnel generates a new random URL every time you restart it — update `.env` and rebuild each time, same as you would with ngrok.
+
+### Option B: ngrok (works for most testing, but not confirmed reliable for Paymob webhooks specifically)
 
 **Install (pick one):**
 ```powershell
@@ -82,9 +116,11 @@ winget install ngrok.ngrok
    ngrok config add-authtoken YOUR_TOKEN_HERE
    ```
 
+If you use ngrok and webhooks aren't arriving despite everything else (URL, port, backend) checking out, switch to Cloudflare Tunnel before spending more time debugging — this was the actual root cause in a real debugging session, and every other layer checked out fine.
+
 ---
 
-## 5. Fill in `.env`
+## 7. Fill in `.env`
 
 ```
 PAYMOB_BASE_URL=https://accept.paymob.com
@@ -98,7 +134,7 @@ PAYMOB_NOTIFICATION_URL=   # filled in next step
 
 ---
 
-## 6. Start ngrok and set the notification URL
+## 8. Start ngrok and set the notification URL
 
 ```powershell
 ngrok http <backend host port>
@@ -120,7 +156,7 @@ PAYMOB_NOTIFICATION_URL=https://a1b2c3d4.ngrok-free.app/api/v1/payments/webhook/
 
 ---
 
-## 7. Run the app
+## 9. Run the app
 
 ```powershell
 docker compose up --build
@@ -132,7 +168,7 @@ Flyway applies migrations automatically on boot (`flyway.enabled: true`).
 
 ---
 
-## 8. Test the full flow
+## 10. Test the full flow
 
 1. **Register/log in** a test user via `/api/v1/auth/**` (or `/api/v1/otp/**`) to get a Bearer token.
 2. **Initiate a payment:**
@@ -186,3 +222,4 @@ Flyway applies migrations automatically on boot (`flyway.enabled: true`).
 | Paymob returns a blank `401 Unauthorized` on every intention request | Secret key isn't reaching the container (see above), or it's stale/regenerated in the dashboard — recheck both |
 | `/history` (or any endpoint returning `PaymentTransaction` directly) returns a huge, repeating JSON blob | Bidirectional JPA relationship (`User` <-> `UserRole`) causing infinite recursion — return a DTO (`PaymentTransactionResponse`) instead of the raw entity |
 | Validation errors or webhook rejections return `500` instead of `400`/`401` | Check `@ControllerAdvice` ordering — a catch-all `Exception.class` handler in one class can intercept exceptions meant for a more specific handler in another. Give domain-specific handlers an explicit `@Order(0)` and the true fallback handler `@Order(Ordered.LOWEST_PRECEDENCE)` |
+| Payment redirect shows `success=true`/`APPROVED`, DB stays `PENDING`, ngrok inspector shows **zero requests at all** (not even failed ones), URL/port/tunnel all verified correct | Paymob likely isn't calling back to ngrok's free-tier domain at all — confirmed by testing the same `notification_url` against `webhook.site`, which received the callback promptly. Switch to Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:<port>`) instead of ngrok |
