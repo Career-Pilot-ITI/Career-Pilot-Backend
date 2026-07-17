@@ -7,6 +7,8 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import static java.time.LocalDateTime.now;
+
 @Getter
 @Entity
 @Setter
@@ -87,5 +89,16 @@ public class UserProfile {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = now();
+        updatedAt = now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = now();
+    }
 
 }
