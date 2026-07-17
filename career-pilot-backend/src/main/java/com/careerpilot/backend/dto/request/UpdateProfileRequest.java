@@ -72,6 +72,9 @@ public class UpdateProfileRequest {
     @Schema(example = "true")
     private Boolean termsAccepted;
 
+    @Schema(example = "true")
+    private Boolean onboardingCompleted;
+
     @Schema(example = "PLUS")
     private String subscriptionTier;
 
