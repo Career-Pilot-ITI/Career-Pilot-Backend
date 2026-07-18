@@ -65,6 +65,16 @@ public class AuthExceptionHandler {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
   }
 
+  @ExceptionHandler(AuthException.OtpLockoutException.class)
+  public ResponseEntity<ApiResponse> handleOtpLockout(AuthException.OtpLockoutException ex) {
+    return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @ExceptionHandler(AuthException.OtpResendLimitException.class)
+  public ResponseEntity<ApiResponse> handleOtpResendLimit(AuthException.OtpResendLimitException ex) {
+    return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
+  }
+
   private ResponseEntity<ApiResponse> buildResponse(String message, HttpStatus status) {
     ApiResponse apiResponse = new ApiResponse(message);
     return new ResponseEntity<>(apiResponse, status);

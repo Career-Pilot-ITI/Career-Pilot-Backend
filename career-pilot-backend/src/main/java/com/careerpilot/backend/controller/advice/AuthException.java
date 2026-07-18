@@ -55,4 +55,16 @@ public class AuthException {
       super(message);
     }
   }
+
+  public static class OtpLockoutException extends RuntimeException {
+    public OtpLockoutException(String message) {
+      super(message);
+    }
+  }
+
+  public static class OtpResendLimitException extends RuntimeException {
+    public OtpResendLimitException(String message) {
+      super(message);
+    }
+  }
 }
