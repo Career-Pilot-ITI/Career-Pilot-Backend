@@ -192,6 +192,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
 
   private void saveSkills(Long userId, List<String> skillNames) {
     skillRepository.deleteByUserId(userId);
+    skillRepository.flush();
     for (String skillName : skillNames) {
       if (skillName == null || skillName.isBlank())
         continue;
