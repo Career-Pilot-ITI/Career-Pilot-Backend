@@ -116,6 +116,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
         session.setStatus(SessionStatus.COMPLETED);
         session.setCompletedAt(LocalDateTime.now());
+        session.setUpdatedAt(LocalDateTime.now());
 
         // Compute duration in seconds
         if (session.getStartedAt() != null) {
