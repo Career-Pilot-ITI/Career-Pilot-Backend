@@ -3,6 +3,7 @@ package com.careerpilot.backend.service.impl;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
+import com.careerpilot.backend.dto.response.ResumeSessionResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.InterviewSession;
@@ -115,6 +116,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
         session.setStatus(SessionStatus.COMPLETED);
         session.setCompletedAt(LocalDateTime.now());
+        session.setUpdatedAt(LocalDateTime.now());
 
         // Compute duration in seconds
         if (session.getStartedAt() != null) {
@@ -130,27 +132,45 @@ public class InterviewSessionService implements IInterviewSessionService {
         return mapToResponse(saved, questions);
     }
 
-    // ---- Mapper ----
+    @Override
+    @Transactional(readOnly = true)
+    public ResumeSessionResponse resumeSession(Long sessionId, Long userId) {
+        InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+
+        List<SessionQuestion> questions =
+                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
+
+        List<SessionQuestionResponse> answered = questions.stream()
+                .filter(q -> q.getCompletedAt() != null)
+                .map(this::mapToSessionQuestionResponse)
+                .collect(Collectors.toList());
+
+        SessionQuestionResponse nextQuestion = questions.stream()
+                .filter(q -> q.getCompletedAt() == null)
+                .findFirst()
+                .map(this::mapToSessionQuestionResponse)
+                .orElse(null);
+
+        return ResumeSessionResponse.builder()
+                .sessionId(session.getId())
+                .trackId(session.getTrack().getId())
+                .trackName(session.getTrack().getName())
+                .status(session.getStatus().name())
+                .startedAt(session.getStartedAt())
+                .updatedAt(session.getUpdatedAt())
+                .answeredCount(answered.size())
+                .totalCount(questions.size())
+                .answeredQuestions(answered)
+                .nextQuestion(nextQuestion)
+                .build();
+    }
+
+    // ---- Mappers ----
 
     private InterviewSessionResponse mapToResponse(InterviewSession session, List<SessionQuestion> questions) {
         List<SessionQuestionResponse> questionResponses = questions.stream()
-                .map(sq -> {
-                    SessionQuestionResponse resp = SessionQuestionResponse.builder()
-                            .id(sq.getId())
-                            .sessionId(session.getId())
-                            .questionText(sq.getQuestionText())
-                            .questionOrder(sq.getQuestionOrder())
-                            .userTranscript(sq.getUserTranscript())
-                            .durationMs(sq.getDurationMs())
-                            .speechRateWpm(sq.getSpeechRateWpm())
-                            .avgPauseMs(sq.getAvgPauseMs())
-                            .silenceRatio(sq.getSilenceRatio())
-                            .createdAt(sq.getCreatedAt())
-                            .completedAt(sq.getCompletedAt())
-                            .build();
-                    resp.setScore(scoreService.getScore(sq.getId()));
-                    return resp;
-                })
+                .map(this::mapToSessionQuestionResponse)
                 .collect(Collectors.toList());
 
         return InterviewSessionResponse.builder()
@@ -165,5 +185,23 @@ public class InterviewSessionService implements IInterviewSessionService {
                 .completedAt(session.getCompletedAt())
                 .questions(questionResponses)
                 .build();
+    }
+
+    private SessionQuestionResponse mapToSessionQuestionResponse(SessionQuestion sq) {
+        SessionQuestionResponse resp = SessionQuestionResponse.builder()
+                .id(sq.getId())
+                .sessionId(sq.getSession().getId())
+                .questionText(sq.getQuestionText())
+                .questionOrder(sq.getQuestionOrder())
+                .userTranscript(sq.getUserTranscript())
+                .durationMs(sq.getDurationMs())
+                .speechRateWpm(sq.getSpeechRateWpm())
+                .avgPauseMs(sq.getAvgPauseMs())
+                .silenceRatio(sq.getSilenceRatio())
+                .createdAt(sq.getCreatedAt())
+                .completedAt(sq.getCompletedAt())
+                .build();
+        resp.setScore(scoreService.getScore(sq.getId()));
+        return resp;
     }
 }

@@ -52,6 +52,9 @@ public class InterviewSession {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     // Relationships
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SessionQuestion> questions;
@@ -63,4 +66,5 @@ public class InterviewSession {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
+
 }

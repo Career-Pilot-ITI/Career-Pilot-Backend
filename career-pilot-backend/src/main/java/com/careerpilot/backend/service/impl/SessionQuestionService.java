@@ -136,7 +136,8 @@ public class SessionQuestionService implements ISessionQuestionService {
         log.info("Answer stored for question ID: {} — speechRate: {} wpm, silenceRatio: {}", 
                 questionId, String.format("%.1f", speechRateWpm), String.format("%.3f", silenceRatio));
 
-        // 8. Checkpoint session (mark still IN_PROGRESS, touch updated timestamp via save)
+        // 8. Checkpoint session
+        session.setUpdatedAt(LocalDateTime.now());
         sessionRepository.save(session);
 
         // 9. Trigger synchronous scoring (async can be added later via @Async + event)

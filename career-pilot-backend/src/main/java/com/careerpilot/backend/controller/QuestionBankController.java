@@ -5,6 +5,9 @@ import com.careerpilot.backend.dto.request.CreateQuestionRequest;
 import com.careerpilot.backend.dto.request.UpdateQuestionRequest;
 import com.careerpilot.backend.dto.response.QuestionResponse;
 import com.careerpilot.backend.service.IQuestionBankService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -16,7 +19,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/admin/questions")
@@ -28,6 +30,9 @@ public class QuestionBankController {
     // ========== CREATE ==========
 
     @PostMapping
+    @Operation(summary = "Create a question")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Question created",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> createQuestion(
             @Valid @RequestBody CreateQuestionRequest request) {
         QuestionResponse question = questionService.createQuestion(request);
@@ -43,6 +48,9 @@ public class QuestionBankController {
     // ========== READ ==========
 
     @GetMapping("/{id}")
+    @Operation(summary = "Get a question by ID")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Question found",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> getQuestion(@PathVariable Long id) {
         QuestionResponse question = questionService.getQuestion(id);
         return ResponseEntity.ok(ApiResponse.builder()
@@ -54,6 +62,9 @@ public class QuestionBankController {
     }
 
     @GetMapping
+    @Operation(summary = "List all questions (paginated)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Paginated list of questions",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> getAllQuestions(
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size,
@@ -72,6 +83,9 @@ public class QuestionBankController {
     }
 
     @GetMapping("/by-track/{trackId}")
+    @Operation(summary = "Get questions by track (paginated)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions by track",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> getQuestionsByTrack(
             @PathVariable Long trackId,
             @RequestParam(required = false, defaultValue = "0") int page,
@@ -89,6 +103,9 @@ public class QuestionBankController {
     }
 
     @GetMapping("/by-difficulty/{difficulty}")
+    @Operation(summary = "Get questions by difficulty (paginated)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions by difficulty",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> getQuestionsByDifficulty(
             @PathVariable String difficulty,
             @RequestParam(required = false, defaultValue = "0") int page,
@@ -106,6 +123,9 @@ public class QuestionBankController {
     }
 
     @GetMapping("/by-category/{category}")
+    @Operation(summary = "Get questions by category (paginated)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions by category",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> getQuestionsByCategory(
             @PathVariable String category,
             @RequestParam(required = false, defaultValue = "0") int page,
@@ -123,6 +143,9 @@ public class QuestionBankController {
     }
 
     @GetMapping("/search")
+    @Operation(summary = "Search questions by text (paginated)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Search results",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> searchQuestions(
             @RequestParam String text,
             @RequestParam(required = false, defaultValue = "0") int page,
@@ -142,6 +165,9 @@ public class QuestionBankController {
     // ========== UPDATE ==========
 
     @PutMapping("/{id}")
+    @Operation(summary = "Update a question")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Question updated",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> updateQuestion(
             @PathVariable Long id,
             @Valid @RequestBody UpdateQuestionRequest request) {
@@ -156,6 +182,9 @@ public class QuestionBankController {
     }
 
     @PatchMapping("/{id}/toggle-status")
+    @Operation(summary = "Toggle question active status")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Status toggled",
+        content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
     public ResponseEntity<ApiResponse> toggleQuestionStatus(@PathVariable Long id) {
         QuestionResponse question = questionService.toggleQuestionStatus(id);
         return ResponseEntity.ok(ApiResponse.builder()
@@ -169,6 +198,9 @@ public class QuestionBankController {
     // ========== DELETE ==========
 
     @DeleteMapping("/{id}")
+    @Operation(summary = "Delete a question")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Question deleted",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> deleteQuestion(@PathVariable Long id) {
         questionService.deleteQuestion(id);
         return ResponseEntity.ok(ApiResponse.builder()
@@ -179,6 +211,9 @@ public class QuestionBankController {
     }
 
     @DeleteMapping("/track/{trackId}")
+    @Operation(summary = "Delete all questions for a track")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions deleted",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> deleteQuestionsByTrack(@PathVariable Long trackId) {
         questionService.deleteQuestionsByTrack(trackId);
         return ResponseEntity.ok(ApiResponse.builder()
