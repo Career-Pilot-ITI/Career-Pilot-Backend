@@ -22,6 +22,9 @@ public class RedisConfig {
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
+    @Value("${REDIS_SSL:false}")
+    private boolean redisSsl;
+
     @Bean
     public RedisClient redisClient() {
         RedisURI.Builder builder = RedisURI.builder()
@@ -30,6 +33,10 @@ public class RedisConfig {
 
         if (redisPassword != null && !redisPassword.isBlank()) {
             builder.withPassword(redisPassword.toCharArray());
+        }
+
+        if (redisSsl) {
+            builder.withSsl(true);
         }
 
         return RedisClient.create(builder.build());
