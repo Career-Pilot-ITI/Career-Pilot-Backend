@@ -4,11 +4,15 @@ import com.careerpilot.backend.controller.response.ApiResponse;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
+import com.careerpilot.backend.dto.response.ResumeSessionResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.ISessionQuestionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -44,6 +48,8 @@ public class InterviewSessionController {
             summary = "Start an interview session",
             description = "Creates a new IN_PROGRESS session for the given track and generates {questionCount} LLM-powered interview questions."
     )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Session created",
+        content = @Content(schema = @Schema(implementation = InterviewSessionResponse.class)))
     public ResponseEntity<ApiResponse> startSession(@Valid @RequestBody StartSessionRequest request) {
         Long userId = getCurrentUserId();
         InterviewSessionResponse session = sessionService.startSession(request, userId);
@@ -62,6 +68,8 @@ public class InterviewSessionController {
      */
     @GetMapping
     @Operation(summary = "List user's interview sessions")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sessions list",
+        content = @Content(array = @ArraySchema(schema = @Schema(implementation = InterviewSessionResponse.class))))
     public ResponseEntity<ApiResponse> listSessions() {
         Long userId = getCurrentUserId();
         List<InterviewSessionResponse> sessions = sessionService.listSessions(userId);
@@ -80,6 +88,8 @@ public class InterviewSessionController {
      */
     @GetMapping("/{sessionId}")
     @Operation(summary = "Get session detail")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session detail",
+        content = @Content(schema = @Schema(implementation = InterviewSessionResponse.class)))
     public ResponseEntity<ApiResponse> getSession(@PathVariable Long sessionId) {
         Long userId = getCurrentUserId();
         InterviewSessionResponse session = sessionService.getSession(sessionId, userId);
@@ -98,6 +108,8 @@ public class InterviewSessionController {
      */
     @PatchMapping("/{sessionId}/complete")
     @Operation(summary = "Complete an interview session")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session completed",
+        content = @Content(schema = @Schema(implementation = InterviewSessionResponse.class)))
     public ResponseEntity<ApiResponse> completeSession(@PathVariable Long sessionId) {
         Long userId = getCurrentUserId();
         InterviewSessionResponse session = sessionService.completeSession(sessionId, userId);
@@ -110,6 +122,32 @@ public class InterviewSessionController {
                 .build());
     }
 
+    // ===================== Session Resume (#41) =====================
+
+    /**
+     * GET /api/v1/interviews/sessions/{sessionId}/resume
+     * Resume a session after a network drop.
+     * Returns session state, answered questions with scores, and the next unanswered question.
+     */
+    @GetMapping("/{sessionId}/resume")
+    @Operation(
+            summary = "Resume session after network drop",
+            description = "Returns session state, answered questions with scores, and the next unanswered question."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session state with next question",
+        content = @Content(schema = @Schema(implementation = ResumeSessionResponse.class)))
+    public ResponseEntity<ApiResponse> resumeSession(@PathVariable Long sessionId) {
+        Long userId = getCurrentUserId();
+        ResumeSessionResponse response = sessionService.resumeSession(sessionId, userId);
+
+        return ResponseEntity.ok(ApiResponse.builder()
+                .success(true)
+                .message("Session resumed successfully")
+                .data(response)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
     // ===================== Question Answer Submission (#39) =====================
 
     /**
@@ -118,6 +156,8 @@ public class InterviewSessionController {
      */
     @GetMapping("/{sessionId}/questions")
     @Operation(summary = "List all questions for a session")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session questions",
+        content = @Content(array = @ArraySchema(schema = @Schema(implementation = SessionQuestionResponse.class))))
     public ResponseEntity<ApiResponse> getSessionQuestions(@PathVariable Long sessionId) {
         Long userId = getCurrentUserId();
         List<SessionQuestionResponse> questions =
@@ -137,6 +177,8 @@ public class InterviewSessionController {
      */
     @GetMapping("/{sessionId}/questions/{questionId}")
     @Operation(summary = "Get a specific session question")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session question",
+        content = @Content(schema = @Schema(implementation = SessionQuestionResponse.class)))
     public ResponseEntity<ApiResponse> getSessionQuestion(
             @PathVariable Long sessionId,
             @PathVariable Long questionId) {
@@ -164,6 +206,8 @@ public class InterviewSessionController {
             description = "Stores transcript + word timings, computes pacing metrics server-side, and triggers LLM scoring. " +
                     "Cannot submit to a COMPLETED or ABANDONED session."
     )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Answer submitted and scored",
+        content = @Content(schema = @Schema(implementation = SessionQuestionResponse.class)))
     public ResponseEntity<ApiResponse> submitAnswer(
             @PathVariable Long sessionId,
             @PathVariable Long questionId,

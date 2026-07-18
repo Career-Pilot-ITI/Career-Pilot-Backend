@@ -2,6 +2,7 @@ package com.careerpilot.backend.service;
 
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
+import com.careerpilot.backend.dto.response.ResumeSessionResponse;
 
 import java.util.List;
 
@@ -42,4 +43,14 @@ public interface IInterviewSessionService {
      * @return the updated InterviewSessionResponse
      */
     InterviewSessionResponse completeSession(Long sessionId, Long userId);
+
+    /**
+     * Resume a session after a network drop.
+     * Returns session state, answered questions with scores, and the next unanswered question.
+     *
+     * @param sessionId the session ID
+     * @param userId    the authenticated user's ID (for ownership check)
+     * @return ResumeSessionResponse with current state
+     */
+    ResumeSessionResponse resumeSession(Long sessionId, Long userId);
 }
