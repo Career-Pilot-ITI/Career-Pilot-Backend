@@ -10,6 +10,8 @@ import com.careerpilot.backend.dto.request.VerifyRequest;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
 import com.careerpilot.backend.service.IAuthentication;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -67,6 +69,8 @@ public class AuthController {
     @Deprecated
     @PostMapping("/register")
     @Operation(summary = "[DEPRECATED] Register with email", description = "Use POST /api/v1/otp/verify instead. Phone OTP signup replaces email registration.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Verification code sent",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> signup(@Valid @RequestBody RegisterUserDto registerUserDto) {
         iAuthentication.signup(registerUserDto);
         ApiResponse apiResponse = new ApiResponse("Code sent");
@@ -76,6 +80,8 @@ public class AuthController {
     @Deprecated
     @PutMapping("/verify")
     @Operation(summary = "[DEPRECATED] Verify email", description = "Use POST /api/v1/otp/verify instead. OTP verification replaces email verification.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Account verified",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> verifyUser(@Valid @RequestBody VerifyRequest request) {
         iAuthentication.verifyUser(request.getEmail(), request.getVerificationCode());
         ApiResponse apiResponse = new ApiResponse("Account verified successfully");
@@ -85,6 +91,8 @@ public class AuthController {
     @Deprecated
     @GetMapping("/resend-code")
     @Operation(summary = "[DEPRECATED] Resend verification code", description = "Use POST /api/v1/otp/send instead. OTP replaces email codes.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Code resent",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> resendVerificationCode(@RequestParam String email) {
         iAuthentication.resendVerificationCode(email);
         ApiResponse apiResponse = new ApiResponse("Verification code resent");
@@ -94,6 +102,8 @@ public class AuthController {
     @Deprecated
     @GetMapping("/reset-password-request")
     @Operation(summary = "[DEPRECATED] Request password reset", description = "Password reset via email is deprecated. OTP-based auth uses phone verification.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Reset email sent",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> requestPasswordReset(@RequestParam String email) {
         iAuthentication.requestPasswordReset(email);
         ApiResponse apiResponse = new ApiResponse("Password reset email sent");
@@ -103,6 +113,8 @@ public class AuthController {
     @Deprecated
     @PutMapping("/reset-password")
     @Operation(summary = "[DEPRECATED] Reset password", description = "Password reset via email is deprecated. OTP-based auth uses phone verification.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Password reset",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> resetPassword(@RequestParam String email, @RequestParam String verificationCode, @RequestParam String newPassword) {
         iAuthentication.resetPassword(email, verificationCode, newPassword);
         ApiResponse apiResponse = new ApiResponse("Password reset successful");
@@ -118,6 +130,8 @@ public class AuthController {
 
     @PostMapping("/logout")
     @Operation(summary = "Logout", description = "Blacklist the access token and revoke all refresh tokens for the user.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Logged out",
+        content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     public ResponseEntity<ApiResponse> logout(@RequestHeader("Authorization") String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiResponse("Invalid token"));
