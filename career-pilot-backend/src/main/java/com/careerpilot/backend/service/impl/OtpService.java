@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import com.careerpilot.backend.controller.advice.AuthException.InvalidOtpException;
 import com.careerpilot.backend.controller.advice.AuthException.OtpCooldownException;
 import com.careerpilot.backend.controller.advice.AuthException.OtpExpiredException;
+import com.careerpilot.backend.controller.advice.AuthException.OtpLockoutException;
+import com.careerpilot.backend.controller.advice.AuthException.OtpResendLimitException;
 import com.careerpilot.backend.service.IOtpService;
 import com.careerpilot.backend.utils.WireWebService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -35,15 +37,36 @@ public class OtpService implements IOtpService {
 
   private static final String OTP_PREFIX = "otp:";
   private static final String COOLDOWN_PREFIX = "otp_cooldown:";
+  private static final String LOCKOUT_PREFIX = "otp_lockout:";
+  private static final String FAILED_PREFIX = "otp_failed:";
+  private static final String RESEND_PREFIX = "otp_resend:";
   private static final long OTP_TTL_SECONDS = 300;
   private static final long COOLDOWN_TTL_SECONDS = 60;
+  private static final long LOCKOUT_TTL_SECONDS = 900;
+  private static final long FAILED_TTL_SECONDS = 900;
+  private static final long RESEND_WINDOW_SECONDS = 900;
   private static final int MAX_ATTEMPTS = 3;
+  private static final int MAX_RESENDS = 3;
+  private static final int MAX_FAILED_ATTEMPTS = 5;
 
   @Override
   public void sendPhoneOtp(String phoneNumber) throws OtpCooldownException {
+    if (redisTemplate.hasKey(LOCKOUT_PREFIX + phoneNumber)) {
+      throw new OtpLockoutException("Too many failed attempts. Try again later.");
+    }
+
     if (redisTemplate.hasKey(COOLDOWN_PREFIX + phoneNumber)) {
       throw new OtpCooldownException(
           "Please wait " + COOLDOWN_TTL_SECONDS + " seconds before sending another OTP.");
+    }
+
+    Long resendCount = redisTemplate.opsForValue().increment(RESEND_PREFIX + phoneNumber);
+    if (resendCount == null) {
+      resendCount = 1L;
+    }
+    redisTemplate.expire(RESEND_PREFIX + phoneNumber, RESEND_WINDOW_SECONDS, TimeUnit.SECONDS);
+    if (resendCount > MAX_RESENDS) {
+      throw new OtpResendLimitException("Maximum resend limit reached. Try again later.");
     }
 
     String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 999999));
@@ -69,6 +92,10 @@ public class OtpService implements IOtpService {
 
   @Override
   public String verifyPhoneOtp(String phoneNumber, String code) {
+    if (redisTemplate.hasKey(LOCKOUT_PREFIX + phoneNumber)) {
+      throw new OtpLockoutException("Too many failed attempts. Try again later.");
+    }
+
     String key = OTP_PREFIX + phoneNumber;
     String stored = redisTemplate.opsForValue().get(key);
 
@@ -100,10 +127,23 @@ public class OtpService implements IOtpService {
       } catch (Exception e) {
         throw new RuntimeException("Failed to update OTP attempts", e);
       }
+
+      Long failedCount = redisTemplate.opsForValue().increment(FAILED_PREFIX + phoneNumber);
+      redisTemplate.expire(FAILED_PREFIX + phoneNumber, FAILED_TTL_SECONDS, TimeUnit.SECONDS);
+      if (failedCount != null && failedCount >= MAX_FAILED_ATTEMPTS) {
+        redisTemplate.opsForValue().set(LOCKOUT_PREFIX + phoneNumber, "1",
+            LOCKOUT_TTL_SECONDS, TimeUnit.SECONDS);
+        redisTemplate.delete(FAILED_PREFIX + phoneNumber);
+        redisTemplate.delete(RESEND_PREFIX + phoneNumber);
+      }
+
       throw new InvalidOtpException("Invalid OTP code.");
     }
 
     redisTemplate.delete(key);
+    redisTemplate.delete(FAILED_PREFIX + phoneNumber);
+    redisTemplate.delete(LOCKOUT_PREFIX + phoneNumber);
+    redisTemplate.delete(RESEND_PREFIX + phoneNumber);
     return phoneNumber;
   }
 }

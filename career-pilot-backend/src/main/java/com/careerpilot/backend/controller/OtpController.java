@@ -7,6 +7,8 @@ import com.careerpilot.backend.dto.request.SendOtpRequest;
 import com.careerpilot.backend.dto.request.VerifyOtpRequest;
 import com.careerpilot.backend.service.IAuthentication;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,10 @@ public class OtpController {
     @PostMapping("/send")
     @RateLimit(capacity = 3, refillTokens = 3, refillSeconds = 60, key = "#request.phoneNumber")
     @Operation(summary = "Send OTP", description = "Send a one-time password to the user's phone number via SMS or WhatsApp.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP sent"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Cooldown active, lockout active, or resend limit reached", content = @Content)
+    })
     public ResponseEntity<ApiResponse> sendOtp(@Valid @RequestBody SendOtpRequest request) {
         iAuthentication.sendOtp(request.getPhoneNumber());
         return ResponseEntity.ok(new ApiResponse("OTP sent"));
@@ -31,6 +37,12 @@ public class OtpController {
 
     @PostMapping("/verify")
     @Operation(summary = "Verify OTP", description = "Verify the OTP code. If the user is new, creates an account. Returns auth tokens and user info with isNewUser flag.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP verified successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid OTP code"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "410", description = "OTP expired"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Lockout active — too many failed attempts", content = @Content)
+    })
     public ResponseEntity<OtpAuthResponse> verify(@Valid @RequestBody VerifyOtpRequest request) {
         OtpAuthResponse response = iAuthentication.verifyOtp(request);
         return ResponseEntity.ok(response);
