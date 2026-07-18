@@ -10,13 +10,4 @@ public class UserResponse {
     private String phoneNumber;
     private boolean isNewUser;
     private UserProfileResponse profile;
-
-    public static UserResponse from(User user, UserProfile profile, boolean isNewUser) {
-        UserResponse r = new UserResponse();
-        r.setId(user.getId());
-        r.setPhoneNumber(user.getPhoneNumber());
-        r.setNewUser(isNewUser);
-        r.setProfile(profile != null ? UserProfileResponse.from(profile) : new UserProfileResponse());
-        return r;
-    }
 }

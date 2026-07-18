@@ -75,9 +75,11 @@ public class UserProfile {
     @Column(name = "terms_accepted")
     private Boolean termsAccepted = false;
 
+    @Deprecated
     @Column(name = "subscription_tier")
     private String subscriptionTier;
 
+    @Deprecated
     @Column(name = "coin_balance", nullable = false)
     private Integer coinBalance = 0;
 

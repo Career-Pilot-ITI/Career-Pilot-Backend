@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.WalletException;
 import com.careerpilot.backend.controller.response.UserFileResponse;
 import com.careerpilot.backend.controller.response.UserProfileResponse;
 import com.careerpilot.backend.dto.request.UpdateProfileRequest;
@@ -15,10 +16,7 @@ import com.careerpilot.backend.repository.IUserFileRepository;
 import com.careerpilot.backend.repository.IUserProfileRepository;
 import com.careerpilot.backend.repository.IUserRepository;
 import com.careerpilot.backend.repository.IUserSkillRepository;
-import com.careerpilot.backend.service.ICvExtractionService;
-import com.careerpilot.backend.service.IFileUploadService;
-import com.careerpilot.backend.service.ILlmService;
-import com.careerpilot.backend.service.IUserProfileService;
+import com.careerpilot.backend.service.*;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +46,8 @@ public class UserProfileServiceImpl implements IUserProfileService {
   private final ICvExtractionService cvExtractionService;
   private final ILlmService llmService;
   private final EntityManager entityManager;
+  private final ICoinWalletService coinWalletService;
+  private final ISubscriptionService subscriptionService;
 
   @Value("${app.upload.path:./uploads}")
   private String uploadPath;
@@ -206,7 +206,14 @@ public class UserProfileServiceImpl implements IUserProfileService {
   }
 
   private UserProfileResponse buildProfileResponse(UserProfile profile, Long userId) {
-    UserProfileResponse response = UserProfileResponse.from(profile);
+    String tier = subscriptionService.getCurrentTier(userId).toString();
+    int balance;
+    try {
+      balance = coinWalletService.getBalance(userId);
+    } catch (WalletException.WalletNotFoundException e) {
+      balance = 0; // legacy user without a wallet — don't fail the whole profile response
+    }
+    UserProfileResponse response = UserProfileResponse.from(profile, tier, balance);
     response.setSkills(getSkillNames(userId));
     return response;
   }
@@ -232,5 +239,8 @@ public class UserProfileServiceImpl implements IUserProfileService {
     profile = new UserProfile();
     profile.setUser(user);
     profileRepository.save(profile);
+
+    coinWalletService.createWalletForUser(user);
+    subscriptionService.assignFreeTierOnRegistration(user);
   }
 }
