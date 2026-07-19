@@ -1,5 +1,6 @@
 package com.careerpilot.backend.controller.response;
 
+import com.careerpilot.backend.dto.response.SkillDto;
 import com.careerpilot.backend.entity.UserProfile;
 import lombok.Data;
 
@@ -20,7 +21,7 @@ public class UserProfileResponse {
   private String currentJobTitle;
   private Integer yearsOfExperience;
   private String cvUrl;
-  private List<String> skills;
+  private List<SkillDto> skills;
   private List<String> targetCompanies;
   private String educationLevel;
   private String timezone;
