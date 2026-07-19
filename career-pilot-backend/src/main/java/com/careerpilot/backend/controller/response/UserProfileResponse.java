@@ -30,7 +30,7 @@ public class UserProfileResponse {
   private Boolean onboardingCompleted;
   private String trackName;
 
-  public static UserProfileResponse from(UserProfile profile) {
+  public static UserProfileResponse from(UserProfile profile, String liveTier, int liveCoinBalance) {
     UserProfileResponse r = new UserProfileResponse();
 
     if (profile.getUser() != null) {
@@ -51,8 +51,8 @@ public class UserProfileResponse {
     r.setEducationLevel(profile.getEducationLevel());
     r.setTimezone(profile.getTimezone());
     r.setTermsAccepted(profile.getTermsAccepted());
-    r.setSubscriptionTier(profile.getSubscriptionTier());
-    r.setCoinBalance(profile.getCoinBalance());
+    r.setSubscriptionTier(liveTier);
+    r.setCoinBalance(liveCoinBalance);
     r.setOnboardingCompleted(profile.getOnboardingCompleted());
     if (profile.getTrack() != null) {
       r.setTrackName(profile.getTrack().getName());

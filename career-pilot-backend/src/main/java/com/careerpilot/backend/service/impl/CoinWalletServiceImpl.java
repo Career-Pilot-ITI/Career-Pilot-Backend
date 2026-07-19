@@ -27,8 +27,8 @@ public class CoinWalletServiceImpl implements ICoinWalletService {
     @Override
     public int getBalance(Long userId) {
         return walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new WalletException.WalletNotFoundException("No wallet found for user: " + userId))
-                .getBalance();
+                .map(CoinWallet::getBalance)
+                .orElse(0);
     }
 
     @Override

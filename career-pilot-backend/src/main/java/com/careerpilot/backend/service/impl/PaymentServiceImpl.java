@@ -6,12 +6,10 @@ import com.careerpilot.backend.dto.payment.PaymentEventResult;
 import com.careerpilot.backend.dto.payment.PaymentInitiationRequest;
 import com.careerpilot.backend.dto.payment.PaymentInitiationResult;
 import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
+import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.PaymentTransaction;
 import com.careerpilot.backend.entity.User;
-import com.careerpilot.backend.service.ICoinWalletService;
-import com.careerpilot.backend.service.IPaymentProvider;
-import com.careerpilot.backend.service.IPaymentService;
-import com.careerpilot.backend.service.IPaymentTransactionService;
+import com.careerpilot.backend.service.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +26,7 @@ public class PaymentServiceImpl implements IPaymentService {
     private final PaymentProviderResolver providerResolver;
     private final IPaymentTransactionService transactionService;
     private final ICoinWalletService coinWalletService;
+    private final ISubscriptionService subscriptionService;
 
     @Override
     @Transactional
@@ -73,8 +72,10 @@ public class PaymentServiceImpl implements IPaymentService {
             transactionService.markConfirmed(tx, event.getProviderTransactionId(), event.getRawPayload());
             if (tx.getCoinPackSize() != null) {
                 coinWalletService.credit(tx.getUser().getId(), tx.getCoinPackSize());
+            } else if (tx.getTierPurchased() != null) {
+                SubscriptionTier tier = SubscriptionTier.valueOf(tx.getTierPurchased());
+                subscriptionService.upgrade(tx.getUser(), tier);
             }
-            // TODO: subscription activation still pending SubscriptionService
         } else {
             transactionService.markFailed(tx, event.getProviderTransactionId(), event.getRawPayload(), event.getFailureReason());
         }

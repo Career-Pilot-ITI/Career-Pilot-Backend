@@ -2,11 +2,15 @@ package com.careerpilot.backend.entity;
 
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "subscriptions")
+@Setter
+@Getter
 public class Subscription {
 
     @Id
@@ -38,6 +42,10 @@ public class Subscription {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "pending_tier")
+    @Enumerated(EnumType.STRING)
+    private SubscriptionTier pendingTier;
 }
 
 
