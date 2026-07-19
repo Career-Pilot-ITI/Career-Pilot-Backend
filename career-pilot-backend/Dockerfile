@@ -1,13 +1,11 @@
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY pom.xml ./
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn dependency:go-offline -B
+RUN mvn dependency:go-offline -B
 
 COPY src ./src
 ARG MAVEN_PROFILE=openai
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn package -DskipTests -B -P ${MAVEN_PROFILE}
+RUN mvn package -DskipTests -B -P ${MAVEN_PROFILE}
 RUN java -Djarmode=layertools -jar target/*.jar extract --destination /extracted
 
 FROM eclipse-temurin:17-jre-alpine
