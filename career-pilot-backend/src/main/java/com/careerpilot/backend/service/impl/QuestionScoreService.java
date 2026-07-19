@@ -7,6 +7,7 @@ import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
+import com.careerpilot.backend.service.IUserSkillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class QuestionScoreService implements IQuestionScoreService {
 
     private final IQuestionScoreRepository scoreRepository;
     private final ILlmService llmService;
+    private final IUserSkillService userSkillService;
 
     @Override
     @Transactional
@@ -77,6 +79,13 @@ public class QuestionScoreService implements IQuestionScoreService {
         QuestionScore saved = scoreRepository.save(score);
 
         log.info("Saved QuestionScore ID: {} with overall: {}", saved.getId(), saved.getOverallScore());
+
+        try {
+            userSkillService.updateSkillsFromScore(sessionQuestion, saved.getOverallScore());
+        } catch (Exception e) {
+            log.error("Failed to update skills from question score: {}", e.getMessage(), e);
+        }
+
         return mapToResponse(saved);
     }
 
