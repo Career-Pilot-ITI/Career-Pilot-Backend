@@ -117,8 +117,8 @@ public class UserProfileServiceImpl implements IUserProfileService {
       profile.setTimezone(request.getTimezone());
     if (request.getTermsAccepted() != null)
       profile.setTermsAccepted(request.getTermsAccepted());
-    if (request.getSubscriptionTier() != null)
-      profile.setSubscriptionTier(request.getSubscriptionTier());
+//    if (request.getSubscriptionTier() != null)
+//      profile.setSubscriptionTier(request.getSubscriptionTier());
     if (request.getOnboardingCompleted() != null)
       profile.setOnboardingCompleted(request.getOnboardingCompleted());
     if (request.getTrackId() != null) {

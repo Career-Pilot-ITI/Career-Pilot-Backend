@@ -75,8 +75,8 @@ public class UpdateProfileRequest {
     @Schema(example = "true")
     private Boolean onboardingCompleted;
 
-    @Schema(example = "PLUS")
-    private String subscriptionTier;
+//    @Schema(example = "PLUS")
+//    private String subscriptionTier;
 
     @Schema(example = "1")
     private Long trackId;
