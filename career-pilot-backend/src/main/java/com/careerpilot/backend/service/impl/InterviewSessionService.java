@@ -14,6 +14,7 @@ import com.careerpilot.backend.repository.IInterviewSessionRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.repository.IUserRepository;
+import com.careerpilot.backend.service.IFeedbackReportService;
 import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
@@ -39,6 +40,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     private final ILlmService llmService;
     private final ISessionQuestionService sessionQuestionService;
     private final IQuestionScoreService scoreService;
+    private final IFeedbackReportService feedbackReportService;
 
     @Override
     @Transactional
@@ -126,6 +128,12 @@ public class InterviewSessionService implements IInterviewSessionService {
 
         InterviewSession saved = sessionRepository.save(session);
         log.info("Completed session ID: {} for user: {}", sessionId, userId);
+
+        try {
+            feedbackReportService.generateFeedbackReport(sessionId, userId);
+        } catch (Exception e) {
+            log.error("Failed to generate feedback report on session completion for session ID: {}", sessionId, e);
+        }
 
         List<SessionQuestion> questions =
                 sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
