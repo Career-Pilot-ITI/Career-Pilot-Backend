@@ -9,7 +9,7 @@ import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserSkill;
 import com.careerpilot.backend.repository.IUserProfileRepository;
-import com.careerpilot.backend.repository.UserSkillRepository;
+import com.careerpilot.backend.repository.IUserSkillRepository;
 import com.careerpilot.backend.service.IUserSkillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +27,7 @@ public class UserSkillServiceImpl implements IUserSkillService {
     private static final int JUNIOR_THRESHOLD = 2;
     private static final int SENIOR_THRESHOLD = 5;
 
-    private final UserSkillRepository userSkillRepository;
+    private final IUserSkillRepository userSkillRepository;
     private final IUserProfileRepository userProfileRepository;
 
     @Override

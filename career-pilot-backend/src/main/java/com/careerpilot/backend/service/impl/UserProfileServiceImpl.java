@@ -6,7 +6,6 @@ import com.careerpilot.backend.controller.response.UserProfileResponse;
 import com.careerpilot.backend.dto.request.UpdateProfileRequest;
 import com.careerpilot.backend.dto.response.CvAnalysis;
 
-
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.entity.UserFile;
 import com.careerpilot.backend.entity.UserProfile;
@@ -25,12 +24,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.careerpilot.backend.dto.response.SkillDto;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -160,7 +164,8 @@ public class UserProfileServiceImpl implements IUserProfileService {
       throw new RuntimeException("Failed to extract text from CV file", e);
     }
     if (cvText.isBlank()) {
-      throw new RuntimeException("Could not extract text from CV. The file may be a scanned image. Please upload a text-based PDF or DOCX.");
+      throw new RuntimeException(
+          "Could not extract text from CV. The file may be a scanned image. Please upload a text-based PDF or DOCX.");
     }
 
     CvAnalysis analysis = llmService.analyzeCv(cvText);
@@ -191,17 +196,37 @@ public class UserProfileServiceImpl implements IUserProfileService {
   }
 
   private void saveSkills(Long userId, List<String> skillNames) {
-    skillRepository.deleteByUserId(userId);
-    skillRepository.flush();
-    for (String skillName : skillNames) {
-      if (skillName == null || skillName.isBlank())
+    List<UserSkill> existing = skillRepository.findByUserId(userId);
+    Map<String, UserSkill> existingByName = new HashMap<>();
+    for (UserSkill s : existing) {
+      existingByName.put(s.getSkillName().toLowerCase(), s);
+    }
+
+    Set<String> incoming = new HashSet<>();
+    for (String raw : skillNames) {
+      if (raw == null || raw.isBlank()) continue;
+      String trimmed = raw.trim();
+      String key = trimmed.toLowerCase();
+      incoming.add(key);
+
+      UserSkill skill = existingByName.get(key);
+      if (skill != null) {
+        skill.setUpdatedAt(LocalDateTime.now());
         continue;
-      UserSkill skill = new UserSkill();
+      }
+
+      skill = new UserSkill();
       skill.setUser(userRepository.getReferenceById(userId));
-      skill.setSkillName(skillName.trim());
+      skill.setSkillName(trimmed);
       skill.setCategory(SkillCategory.TECHNICAL);
       skill.setCreatedAt(LocalDateTime.now());
       skillRepository.save(skill);
+    }
+
+    for (UserSkill skill : existing) {
+      if (!incoming.contains(skill.getSkillName().toLowerCase())) {
+        skillRepository.delete(skill);
+      }
     }
   }
 
@@ -214,17 +239,22 @@ public class UserProfileServiceImpl implements IUserProfileService {
       balance = 0; // legacy user without a wallet — don't fail the whole profile response
     }
     UserProfileResponse response = UserProfileResponse.from(profile, tier, balance);
-    response.setSkills(getSkillNames(userId));
+    response.setSkills(getSkillDtos(userId));
     return response;
   }
 
-  private List<String> getSkillNames(Long userId) {
+  private List<SkillDto> getSkillDtos(Long userId) {
     List<UserSkill> userSkills = skillRepository.findByUserId(userId);
     if (userSkills == null || userSkills.isEmpty()) {
       return Collections.emptyList();
     }
     return userSkills.stream()
-        .map(UserSkill::getSkillName)
+        .map(s -> new SkillDto(
+            s.getSkillName(),
+            s.getCategory() != null ? s.getCategory().name() : null,
+            s.getPerformanceScore(),
+            s.getTimesAssessed(),
+            s.getLastAssessedAt()))
         .collect(Collectors.toList());
   }
 
