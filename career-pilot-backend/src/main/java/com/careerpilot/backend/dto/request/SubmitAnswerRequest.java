@@ -11,9 +11,15 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * Request body for POST /api/v1/interviews/sessions/{id}/questions/{qId}/answer
- * Contains transcript + word timings from mobile STT.
- * audioUrl is reserved for future audio-based scoring.
+ * Request body for POST /api/v1/interviews/sessions/{sessionId}/answer
+ *
+ * sessionElapsedSeconds: How many seconds have elapsed on the CLIENT device since the
+ * interview started (i.e. since the frontend received the startSession response).
+ * This is the authoritative clock for session completion — the backend never trusts its
+ * own wall clock for this, because network delay and congestion would make it unreliable.
+ *
+ * durationMs / words: Optional STT pacing data for this specific answer only.
+ * audioUrl: Reserved for future audio-based scoring.
  */
 @Data
 @NoArgsConstructor
@@ -23,11 +29,18 @@ public class SubmitAnswerRequest {
     @NotBlank(message = "Transcript must not be blank")
     private String transcript;
 
-    @NotNull(message = "Duration is required")
-    @Min(value = 0, message = "Duration must be non-negative")
-    private Long durationMs;
+    /**
+     * Client-side elapsed time (seconds) since the interview began.
+     * Used as the authoritative source for time-based session completion.
+     * If omitted, the backend falls back to the maxQuestions safety cap only.
+     */
+    @Min(value = 0, message = "sessionElapsedSeconds must be non-negative")
+    private Long sessionElapsedSeconds;
 
-    private String audioUrl;  // S3/CDN URL — null until audio scoring lands
+    @Min(value = 0, message = "Duration must be non-negative")
+    private Long durationMs;   // duration of this specific answer only
+
+    private String audioUrl;
 
     @Valid
     private List<WordTimingDto> words;

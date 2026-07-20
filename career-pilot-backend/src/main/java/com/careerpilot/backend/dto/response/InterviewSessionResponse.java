@@ -7,26 +7,26 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
+/**
+ * Session metadata — used by GET /sessions and GET /sessions/{id}.
+ * Does NOT embed questions. Questions live in FeedbackReportResponse.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class InterviewSessionResponse {
-
     private Long id;
     private Long trackId;
     private String trackName;
-    private String status;          // IN_PROGRESS, COMPLETED, ABANDONED
-    private Integer overallScore;   // null until feedback is generated
+    private String status;
+    private Integer overallScore;
     private Integer durationSeconds;
-
-    private LocalDateTime createdAt;
+    private Integer targetDurationMinutes;
+    private Integer maxQuestions;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
-
-    // Questions attached to this session (ordered by questionOrder)
-    private List<SessionQuestionResponse> questions;
+    private LocalDateTime createdAt;
 }

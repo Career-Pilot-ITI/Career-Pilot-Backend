@@ -1,8 +1,10 @@
 package com.careerpilot.backend.service;
 
 import com.careerpilot.backend.dto.request.StartSessionRequest;
+import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
-import com.careerpilot.backend.dto.response.ResumeSessionResponse;
+import com.careerpilot.backend.dto.response.StartSessionResponse;
+import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 
 import java.util.List;
 
@@ -10,47 +12,33 @@ public interface IInterviewSessionService {
 
     /**
      * Start a new interview session for a track.
-     * Picks up to 5 active questions from the track's question bank and attaches them.
-     *
-     * @param request contains the trackId to start the session for
-     * @param userId  the authenticated user's ID
-     * @return the created InterviewSession with its questions
+     * Generates the first open-ended question via LLM and returns it immediately.
+     * No questions are pre-generated — each question is produced dynamically
+     * after the candidate's previous answer.
      */
-    InterviewSessionResponse startSession(StartSessionRequest request, Long userId);
+    StartSessionResponse startSession(StartSessionRequest request, Long userId);
+
+    /**
+     * Submit an answer to the current active (unanswered) question in the session.
+     *
+     * Returns:
+     *  - score:         evaluation of the just-submitted answer
+     *  - nextQuestion:  dynamically generated follow-up/next question (null when session ends)
+     *  - sessionStatus: IN_PROGRESS | COMPLETED
+     *
+     * Session completion is determined by the client-reported sessionElapsedSeconds
+     * vs targetDurationMinutes, with maxQuestions as a safety cap.
+     */
+    SubmitAnswerResponse submitAnswer(Long sessionId, SubmitAnswerRequest request, Long userId);
 
     /**
      * List all sessions for the authenticated user, newest first.
-     *
-     * @param userId the authenticated user's ID
-     * @return ordered list of InterviewSessionResponse
+     * Does NOT embed questions — frontend uses this for history/dashboard views.
      */
     List<InterviewSessionResponse> listSessions(Long userId);
 
     /**
-     * Get a single session's details including its questions (with scores if available).
-     *
-     * @param sessionId the session ID
-     * @param userId    the authenticated user's ID (for ownership check)
-     * @return the InterviewSessionResponse
+     * Get a single session's metadata. Does NOT embed questions.
      */
     InterviewSessionResponse getSession(Long sessionId, Long userId);
-
-    /**
-     * Mark a session as COMPLETED and record its completion time.
-     *
-     * @param sessionId the session ID
-     * @param userId    the authenticated user's ID (for ownership check)
-     * @return the updated InterviewSessionResponse
-     */
-    InterviewSessionResponse completeSession(Long sessionId, Long userId);
-
-    /**
-     * Resume a session after a network drop.
-     * Returns session state, answered questions with scores, and the next unanswered question.
-     *
-     * @param sessionId the session ID
-     * @param userId    the authenticated user's ID (for ownership check)
-     * @return ResumeSessionResponse with current state
-     */
-    ResumeSessionResponse resumeSession(Long sessionId, Long userId);
 }
