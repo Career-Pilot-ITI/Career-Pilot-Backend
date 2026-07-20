@@ -125,6 +125,7 @@ CREATE TABLE session_questions (
     user_transcript TEXT,
     audio_url VARCHAR(500),
     generated_by_llm BOOLEAN DEFAULT TRUE,
+    coaching_tip TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP
 );

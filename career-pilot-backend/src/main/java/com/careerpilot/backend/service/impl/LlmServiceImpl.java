@@ -1,16 +1,21 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.service.ILlmService;
+
 import com.careerpilot.backend.dto.response.CvAnalysis;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
-import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.dto.response.ScoreResponse;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.FeedbackReport;
 import com.careerpilot.backend.entity.QuestionBank;
+import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.RagContextDocument;
+import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.repository.IFeedbackReportRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
+import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.repository.IRagContextDocumentRepository;
+import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.careerpilot.backend.utils.PiiRedactionUtil;
@@ -20,6 +25,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -33,6 +39,8 @@ public class LlmServiceImpl implements ILlmService {
   private final IQuestionBankRepository questionBankRepository;
   private final IFeedbackReportRepository feedbackReportRepository;
   private final IRagContextDocumentRepository ragContextDocumentRepository;
+  private final ISessionQuestionRepository sessionQuestionRepository;
+  private final IQuestionScoreRepository questionScoreRepository;
 
   @Override
   public List<GeneratedQuestion> generateQuestions(Long trackId, int count) {
@@ -137,43 +145,95 @@ public class LlmServiceImpl implements ILlmService {
   }
 
   @Override
-  public List<String> generateTips(String transcript, ScoreResponse scores) {
-    String prompt = """
-        Based on this interview answer and scores, generate 3-5 coaching tips.
+  public List<String> generateSessionTips(Long sessionId, Long userId) {
+    List<SessionQuestion> questions = sessionQuestionRepository
+        .findBySessionIdOrderByQuestionOrderAsc(sessionId);
 
-        Scores:
-        - Content Relevance: %s/100
-        - Clarity: %s/100
-        - Confidence: %s/100
-        - Filler words: %s/100
+    List<Long> questionIds = questions.stream()
+        .map(SessionQuestion::getId)
+        .collect(Collectors.toList());
 
-        Reason: %s
+    Map<Long, QuestionScore> scoreByQuestionId = questionScoreRepository
+        .findBySessionQuestionIdIn(questionIds).stream()
+        .collect(Collectors.toMap(score -> score.getSessionQuestion().getId(), score -> score));
 
-        Transcript: %s
+    StringBuilder sb = new StringBuilder();
+    sb.append("Here is the full interview session. Generate 3-5 overall coaching tips.\n\n");
 
-        Return ONLY a JSON array of strings, each tip is ranked by importance.
+    for (SessionQuestion q : questions) {
+      sb.append("--- Question ").append(q.getQuestionOrder()).append(" ---\n");
+      sb.append("Question text: ").append(q.getQuestionText()).append("\n");
+      sb.append("Candidate answer: ").append(q.getUserTranscript()).append("\n");
+
+      QuestionScore sc = scoreByQuestionId.get(q.getId());
+      if (sc != null) {
+        sb.append("Scores: contentRelevance=").append(sc.getContentRelevance())
+            .append(", clarity=").append(sc.getClarity())
+            .append(", confidence=").append(sc.getConfidence())
+            .append(", pacing=").append(sc.getPacing())
+            .append(", fillerWords=").append(sc.getFillerWords())
+            .append(", overall=").append(sc.getOverallScore()).append("\n");
+      }
+      sb.append("\n");
+    }
+
+    String prompt = sb.toString() + """
+        Return ONLY a JSON array of strings with no markdown formatting.
         Example: ["Focus on structuring your answer with STAR method", "Work on reducing filler words"]
-        """.formatted(
-        scores.contentRelevance(), scores.clarity(),
-        scores.confidence(), scores.fillerWords(),
-        scores.reasoning(), transcript);
+        Each tip must be a concrete, actionable recommendation based on the patterns visible in the transcripts and scores.
+        """;
 
     String response = chatClient.prompt()
         .system(s -> s.text("""
             You are a senior career coach helping candidates improve their interview performance.
             Provide specific, actionable, and constructive feedback.
             Each tip should be a concrete recommendation, not generic advice.
+            Focus on the patterns across the entire session.
             """))
         .user(prompt)
         .call()
         .content();
 
     try {
-      return objectMapper.readValue(response, new TypeReference<List<String>>() {
-      });
+      return objectMapper.readValue(stripMarkdown(response), new TypeReference<List<String>>() {});
     } catch (Exception e) {
-      return List.of(response);
+      log.warn("Failed to parse session tips response: {}", response, e);
+      return List.of("Review your answers and focus on clarity and structure.");
     }
+  }
+
+  @Override
+  public String generateQuestionTip(String questionText, String transcript,
+      int contentRelevance, int clarity, int confidence, int pacing, int fillerWords) {
+    String prompt = """
+        Based on this interview answer and scores, generate a brief coaching tip or praise (1-2 sentences).
+
+        Question: %s
+        Candidate answer: %s
+
+        Scores:
+        - Content Relevance: %s/100
+        - Clarity: %s/100
+        - Confidence: %s/100
+        - Pacing: %s/100
+        - Filler words: %s/100
+
+        If the overall score is high (80+), praise the candidate and suggest one minor improvement.
+        If the overall score is low, give one specific, actionable tip to improve.
+        Return ONLY the tip text, no JSON, no markdown.
+        """.formatted(questionText, transcript,
+        contentRelevance, clarity, confidence, pacing, fillerWords);
+
+    String response = chatClient.prompt()
+        .system(s -> s.text("""
+            You are a senior career coach giving real-time feedback after each interview question.
+            Be concise (1-2 sentences). Be specific. Be encouraging even when being critical.
+            """))
+        .user(prompt)
+        .call()
+        .content();
+
+    return response != null ? response.strip() : "Keep practicing to improve your answer.";
   }
 
   @Override

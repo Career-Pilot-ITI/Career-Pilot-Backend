@@ -17,9 +17,14 @@ public interface ILlmService {
   @RedactPii
   ScoreResponse scoreAnswer(Long questionId, Long userId, String transcript);
 
+  @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
+  @RedactPii
+  List<String> generateSessionTips(Long sessionId, Long userId);
+
   @RateLimit(capacity = 10, refillTokens = 10, refillSeconds = 60)
   @RedactPii
-  List<String> generateTips(String transcript, ScoreResponse scores);
+  String generateQuestionTip(String questionText, String transcript,
+      int contentRelevance, int clarity, int confidence, int pacing, int fillerWords);
 
   @RateLimit(capacity = 2, refillTokens = 2, refillSeconds = 60)
   @RedactPii

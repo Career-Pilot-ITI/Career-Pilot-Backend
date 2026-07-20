@@ -39,6 +39,9 @@ public class QuestionScore {
     @Column(name = "content_relevance", nullable = false)
     private Integer contentRelevance; // 0-100
 
+    @Column(name = "coaching_tip", columnDefinition = "TEXT")
+    private String coachingTip;
+
     @Column(name = "overall_question_score", nullable = false)
     private Integer overallScore;     // weighted average
 
