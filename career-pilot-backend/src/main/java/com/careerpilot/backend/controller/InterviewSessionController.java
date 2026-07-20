@@ -3,10 +3,12 @@ package com.careerpilot.backend.controller;
 import com.careerpilot.backend.controller.response.ApiResponse;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
+import com.careerpilot.backend.dto.response.FeedbackReportResponse;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
 import com.careerpilot.backend.dto.response.ResumeSessionResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
+import com.careerpilot.backend.service.IFeedbackReportService;
 import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.ISessionQuestionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,6 +37,7 @@ public class InterviewSessionController {
 
     private final IInterviewSessionService sessionService;
     private final ISessionQuestionService sessionQuestionService;
+    private final IFeedbackReportService feedbackReportService;
 
     // ===================== Session Management (#38) =====================
 
@@ -144,6 +147,31 @@ public class InterviewSessionController {
                 .success(true)
                 .message("Session resumed successfully")
                 .data(response)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    // ===================== Feedback Report (#41) =====================
+
+    /**
+     * GET /api/v1/interviews/sessions/{sessionId}/feedback
+     * Get full feedback report for a session including overall score, category scores, and per-question breakdown.
+     */
+    @GetMapping("/{sessionId}/feedback")
+    @Operation(
+            summary = "Get full feedback report for an interview session",
+            description = "Returns structured feedback report: overall score (0-100), 5 category scores, coaching tips, and per-question score breakdown."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Feedback report retrieved successfully",
+        content = @Content(schema = @Schema(implementation = FeedbackReportResponse.class)))
+    public ResponseEntity<ApiResponse> getFeedbackReport(@PathVariable Long sessionId) {
+        Long userId = getCurrentUserId();
+        FeedbackReportResponse report = feedbackReportService.getFeedbackReport(sessionId, userId);
+
+        return ResponseEntity.ok(ApiResponse.builder()
+                .success(true)
+                .message("Feedback report retrieved successfully")
+                .data(report)
                 .timestamp(LocalDateTime.now())
                 .build());
     }
