@@ -9,24 +9,23 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * Session metadata — used by GET /sessions and GET /sessions/{id}.
- * Does NOT embed questions. Questions live in FeedbackReportResponse.
+ * Response returned by POST /api/v1/interviews/sessions (start session).
+ *
+ * The frontend only needs three things to run the interview:
+ *  - sessionId          → used in every subsequent request
+ *  - targetDurationMinutes → how long to run the client-side timer for
+ *  - currentQuestion    → the first question to display immediately
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class InterviewSessionResponse {
-    private Long id;
-    private Long trackId;
+public class StartSessionResponse {
+    private Long sessionId;
     private String trackName;
-    private String status;
-    private Integer overallScore;
-    private Integer durationSeconds;
     private Integer targetDurationMinutes;
     private Integer maxQuestions;
     private LocalDateTime startedAt;
-    private LocalDateTime completedAt;
-    private LocalDateTime createdAt;
+    private InterviewQuestionDto currentQuestion;  // question #1, ready to display
 }

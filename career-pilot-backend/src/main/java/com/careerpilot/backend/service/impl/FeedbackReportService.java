@@ -3,6 +3,7 @@ package com.careerpilot.backend.service.impl;
 import com.careerpilot.backend.dto.response.FeedbackReportResponse;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
+import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.FeedbackReport;
 import com.careerpilot.backend.entity.InterviewSession;
 import com.careerpilot.backend.entity.QuestionScore;
@@ -24,7 +25,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,127 +39,141 @@ public class FeedbackReportService implements IFeedbackReportService {
     private final ILlmService llmService;
     private final ObjectMapper objectMapper;
 
-    @Override
-    @Transactional(readOnly = true)
-    public FeedbackReportResponse getFeedbackReport(Long sessionId, Long userId) {
-        log.info("Fetching feedback report for session ID: {}, user ID: {}", sessionId, userId);
-
-        // 1. Verify session exists and belongs to user
-        InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new RuntimeException("Session not found or access denied: " + sessionId));
-
-        // 2. Fetch existing report or generate if not present
-        Optional<FeedbackReport> existingReport = feedbackReportRepository.findBySessionId(sessionId);
-        if (existingReport.isPresent()) {
-            List<SessionQuestion> questions = sessionQuestionRepository
-                    .findBySessionIdOrderByQuestionOrderAsc(sessionId);
-            Map<Long, QuestionScore> scoreByQuestionId = scoreRepository
-                    .findBySessionQuestionIdIn(questions.stream().map(SessionQuestion::getId).collect(Collectors.toList()))
-                    .stream()
-                    .collect(Collectors.toMap(s -> s.getSessionQuestion().getId(), s -> s));
-            return mapToResponse(existingReport.get(), sessionId, questions, scoreByQuestionId);
-        }
-
-        // Lazy generation if not present
-        return generateFeedbackReport(sessionId, userId);
-    }
-
+    /**
+     * The terminal call of the interview lifecycle.
+     *
+     * Design:
+     *  - If session is still IN_PROGRESS → mark it COMPLETED, generate+save report, return it.
+     *  - If session is already COMPLETED and report exists → return the saved report (idempotent).
+     *  - If session is already COMPLETED but report is missing → generate+save it, return it.
+     *
+     * This is the ONLY place where session status transitions to COMPLETED.
+     * There is no separate "complete session" endpoint.
+     */
     @Override
     @Transactional
-    public FeedbackReportResponse generateFeedbackReport(Long sessionId, Long userId) {
-        log.info("Generating feedback report for session ID: {}, user ID: {}", sessionId, userId);
+    public FeedbackReportResponse getFeedbackReport(Long sessionId, Long userId) {
+        log.info("GET /feedback called for session: {}, user: {}", sessionId, userId);
 
-        // 1. Load session with security check
         InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new RuntimeException("Session not found or access denied: " + sessionId));
 
-        // 2. Load questions and batch-load scores (eliminates N+1)
-        List<SessionQuestion> questions = sessionQuestionRepository
-                .findBySessionIdOrderByQuestionOrderAsc(sessionId);
+        if (session.getStatus() == SessionStatus.ABANDONED) {
+            throw new IllegalStateException("Cannot generate feedback for an abandoned session.");
+        }
 
-        Map<Long, QuestionScore> scoreByQuestionId = scoreRepository
-                .findBySessionQuestionIdIn(questions.stream().map(SessionQuestion::getId).collect(Collectors.toList()))
+        // --- Close the session if it hasn't been closed yet ---
+        if (session.getStatus() == SessionStatus.IN_PROGRESS) {
+            session.setStatus(SessionStatus.COMPLETED);
+            session.setCompletedAt(LocalDateTime.now());
+            session.setUpdatedAt(LocalDateTime.now());
+            sessionRepository.save(session);
+            log.info("Session {} marked COMPLETED via feedback endpoint.", sessionId);
+        }
+
+        // --- Return saved report if it already exists (idempotent re-fetch) ---
+        return feedbackReportRepository.findBySessionId(sessionId)
+                .map(existing -> {
+                    log.info("Returning existing FeedbackReport for session {}.", sessionId);
+                    return buildResponse(existing, sessionId);
+                })
+                .orElseGet(() -> generateAndSave(session, sessionId, userId));
+    }
+
+    // =====================================================================
+    // Internal: generate + save
+    // =====================================================================
+
+    private FeedbackReportResponse generateAndSave(InterviewSession session, Long sessionId, Long userId) {
+        log.info("Generating FeedbackReport for session {}.", sessionId);
+
+        // Load all answered questions + batch-fetch scores (no N+1)
+        List<SessionQuestion> questions =
+                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
+
+        List<Long> questionIds = questions.stream()
+                .map(SessionQuestion::getId)
+                .collect(Collectors.toList());
+
+        Map<Long, QuestionScore> scoreMap = scoreRepository
+                .findBySessionQuestionIdIn(questionIds)
                 .stream()
                 .collect(Collectors.toMap(s -> s.getSessionQuestion().getId(), s -> s));
 
-        List<QuestionScore> scores = new ArrayList<>(scoreByQuestionId.values());
+        List<QuestionScore> scores = new ArrayList<>(scoreMap.values());
 
-        // 3. Compute category averages
-        int clarityAvg = 0;
-        int confidenceAvg = 0;
-        int pacingAvg = 0;
-        int fillerWordsAvg = 0;
-        int contentRelevanceAvg = 0;
-        int overallScore = 0;
-
+        // Compute category averages + weighted overall
+        int clarity = 0, confidence = 0, pacing = 0, fillerWords = 0, contentRelevance = 0, overall = 0;
         if (!scores.isEmpty()) {
-            clarityAvg = (int) Math.round(scores.stream().mapToInt(QuestionScore::getClarity).average().orElse(0));
-            confidenceAvg = (int) Math.round(scores.stream().mapToInt(QuestionScore::getConfidence).average().orElse(0));
-            pacingAvg = (int) Math.round(scores.stream().mapToInt(QuestionScore::getPacing).average().orElse(0));
-            fillerWordsAvg = (int) Math.round(scores.stream().mapToInt(QuestionScore::getFillerWords).average().orElse(0));
-            contentRelevanceAvg = (int) Math.round(scores.stream().mapToInt(QuestionScore::getContentRelevance).average().orElse(0));
-
-            // Weighted average: contentRelevance(40%), clarity(20%), confidence(20%), pacing(10%), fillerWords(10%)
-            overallScore = (contentRelevanceAvg * 40 + clarityAvg * 20 + confidenceAvg * 20 + pacingAvg * 10 + fillerWordsAvg * 10) / 100;
+            clarity          = avg(scores, QuestionScore::getClarity);
+            confidence       = avg(scores, QuestionScore::getConfidence);
+            pacing           = avg(scores, QuestionScore::getPacing);
+            fillerWords      = avg(scores, QuestionScore::getFillerWords);
+            contentRelevance = avg(scores, QuestionScore::getContentRelevance);
+            // Weighted: content(40%) clarity(20%) confidence(20%) pacing(10%) filler(10%)
+            overall = (contentRelevance * 40 + clarity * 20 + confidence * 20 + pacing * 10 + fillerWords * 10) / 100;
         }
 
-        // 4. Update overall score on interview session entity
-        session.setOverallScore(overallScore);
+        // Persist overall score back to the session row
+        session.setOverallScore(overall);
         sessionRepository.save(session);
 
-        // 5. Get or create FeedbackReport entity
-        FeedbackReport report = feedbackReportRepository.findBySessionId(sessionId)
-                .orElseGet(() -> {
-                    FeedbackReport r = new FeedbackReport();
-                    r.setSession(session);
-                    r.setCreatedAt(LocalDateTime.now());
-                    return r;
-                });
-
-        report.setOverallScore(overallScore);
-        report.setClarityScore(clarityAvg);
-        report.setConfidenceScore(confidenceAvg);
-        report.setPacingScore(pacingAvg);
-        report.setFillerWordsScore(fillerWordsAvg);
-        report.setContentRelevanceScore(contentRelevanceAvg);
+        // Build and persist the FeedbackReport
+        FeedbackReport report = new FeedbackReport();
+        report.setSession(session);
+        report.setOverallScore(overall);
+        report.setClarityScore(clarity);
+        report.setConfidenceScore(confidence);
+        report.setPacingScore(pacing);
+        report.setFillerWordsScore(fillerWords);
+        report.setContentRelevanceScore(contentRelevance);
         report.setGeneratedAt(LocalDateTime.now());
+        report.setCreatedAt(LocalDateTime.now());
 
-        // 6. Generate overall session coaching tips via LLM
+        // Generate overall coaching tips via LLM
         try {
-            List<String> overallTips = llmService.generateSessionTips(sessionId, userId);
-            report.setCoachingTips(objectMapper.writeValueAsString(overallTips));
+            List<String> tips = llmService.generateSessionTips(sessionId, userId);
+            report.setCoachingTips(objectMapper.writeValueAsString(tips));
         } catch (Exception e) {
-            log.error("Failed to generate overall coaching tips for session {}: {}", sessionId, e.getMessage(), e);
-            if (report.getCoachingTips() == null) {
-                report.setCoachingTips("[]");
-            }
+            log.error("Failed to generate session tips for {}: {}", sessionId, e.getMessage());
+            report.setCoachingTips("[]");
         }
 
-        FeedbackReport savedReport = feedbackReportRepository.save(report);
-        log.info("Saved FeedbackReport ID: {} with overall score: {}", savedReport.getId(), savedReport.getOverallScore());
+        FeedbackReport saved = feedbackReportRepository.save(report);
+        log.info("Saved FeedbackReport ID: {} (overall: {}) for session {}.",
+                saved.getId(), saved.getOverallScore(), sessionId);
 
-        return mapToResponse(savedReport, sessionId, questions, scoreByQuestionId);
+        return buildResponse(saved, sessionId);
     }
 
-    private FeedbackReportResponse mapToResponse(FeedbackReport report, Long sessionId,
-            List<SessionQuestion> questions, Map<Long, QuestionScore> scoreByQuestionId) {
-        List<SessionQuestionResponse> questionResponses = questions.stream()
+    // =====================================================================
+    // Mapper
+    // =====================================================================
+
+    private FeedbackReportResponse buildResponse(FeedbackReport report, Long sessionId) {
+        List<SessionQuestion> questions =
+                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
+
+        List<Long> qIds = questions.stream().map(SessionQuestion::getId).collect(Collectors.toList());
+        Map<Long, QuestionScore> scoreMap = scoreRepository.findBySessionQuestionIdIn(qIds)
+                .stream()
+                .collect(Collectors.toMap(s -> s.getSessionQuestion().getId(), s -> s));
+
+        List<SessionQuestionResponse> qResponses = questions.stream()
                 .map(sq -> {
-                    QuestionScore score = scoreByQuestionId.get(sq.getId());
-                    QuestionScoreResponse scoreResp = score != null
-                            ? QuestionScoreResponse.builder()
-                                    .id(score.getId())
-                                    .sessionQuestionId(score.getSessionQuestion().getId())
-                                    .contentRelevance(score.getContentRelevance())
-                                    .clarity(score.getClarity())
-                                    .confidence(score.getConfidence())
-                                    .pacing(score.getPacing())
-                                    .fillerWords(score.getFillerWords())
-                                    .overallScore(score.getOverallScore())
-                                    .coachingTip(score.getCoachingTip())
-                                    .createdAt(score.getCreatedAt())
-                                    .build()
-                            : null;
+                    QuestionScore score = scoreMap.get(sq.getId());
+                    QuestionScoreResponse scoreResp = score == null ? null : QuestionScoreResponse.builder()
+                            .id(score.getId())
+                            .sessionQuestionId(score.getSessionQuestion().getId())
+                            .contentRelevance(score.getContentRelevance())
+                            .clarity(score.getClarity())
+                            .confidence(score.getConfidence())
+                            .pacing(score.getPacing())
+                            .fillerWords(score.getFillerWords())
+                            .overallScore(score.getOverallScore())
+                            .coachingTip(score.getCoachingTip())
+                            .createdAt(score.getCreatedAt())
+                            .build();
                     return SessionQuestionResponse.builder()
                             .id(sq.getId())
                             .sessionId(sq.getSession().getId())
@@ -177,8 +191,6 @@ public class FeedbackReportService implements IFeedbackReportService {
                 })
                 .collect(Collectors.toList());
 
-        List<String> tipsList = parseCoachingTips(report.getCoachingTips());
-
         return FeedbackReportResponse.builder()
                 .id(report.getId())
                 .sessionId(report.getSession().getId())
@@ -188,26 +200,36 @@ public class FeedbackReportService implements IFeedbackReportService {
                 .pacingScore(report.getPacingScore())
                 .fillerWordsScore(report.getFillerWordsScore())
                 .contentRelevanceScore(report.getContentRelevanceScore())
-                .coachingTips(tipsList)
+                .coachingTips(parseTips(report.getCoachingTips()))
                 .generatedAt(report.getGeneratedAt())
                 .createdAt(report.getCreatedAt())
-                .questions(questionResponses)
+                .questions(qResponses)
                 .build();
     }
 
-    private List<String> parseCoachingTips(String rawTips) {
-        if (rawTips == null || rawTips.isBlank()) {
-            return new ArrayList<>();
-        }
+    // =====================================================================
+    // Utilities
+    // =====================================================================
+
+    @FunctionalInterface
+    private interface ScoreExtractor {
+        int get(QuestionScore s);
+    }
+
+    private int avg(List<QuestionScore> scores, ScoreExtractor fn) {
+        return (int) Math.round(scores.stream().mapToInt(fn::get).average().orElse(0));
+    }
+
+    private List<String> parseTips(String raw) {
+        if (raw == null || raw.isBlank()) return new ArrayList<>();
         try {
-            if (rawTips.trim().startsWith("[")) {
-                return objectMapper.readValue(rawTips, new TypeReference<List<String>>() {});
-            } else {
-                return List.of(rawTips);
+            if (raw.trim().startsWith("[")) {
+                return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
             }
+            return List.of(raw);
         } catch (Exception e) {
-            log.warn("Failed to parse coaching tips string: {}", rawTips, e);
-            return List.of(rawTips);
+            log.warn("Failed to parse coaching tips: {}", raw);
+            return List.of(raw);
         }
     }
 }

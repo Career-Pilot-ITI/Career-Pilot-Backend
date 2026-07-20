@@ -11,6 +11,7 @@ import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.RagContextDocument;
 import com.careerpilot.backend.entity.SessionQuestion;
+
 import com.careerpilot.backend.repository.IFeedbackReportRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.IQuestionScoreRepository;
@@ -43,47 +44,76 @@ public class LlmServiceImpl implements ILlmService {
   private final IQuestionScoreRepository questionScoreRepository;
 
   @Override
-  public List<GeneratedQuestion> generateQuestions(Long trackId, int count) {
-    List<QuestionBank> baseQuestions = questionBankRepository.findByTrackId(trackId);
+  public GeneratedQuestion generateNextQuestion(Long trackId, String trackName, Long userId, List<SessionQuestion> previousQuestions) {
+    List<QuestionBank> baseQuestions = questionBankRepository.findByTrackIdAndIsActiveTrue(trackId);
+    if (baseQuestions.isEmpty()) {
+      baseQuestions = questionBankRepository.findByTrackId(trackId);
+    }
     String samples = baseQuestions.stream()
         .map(q -> "- ID " + q.getId() + ": " + q.getQuestionText()
             + "  [keywords: " + q.getExpectedKeywords() + "]")
         .collect(Collectors.joining("\n"));
 
+    StringBuilder historySb = new StringBuilder();
+    if (previousQuestions == null || previousQuestions.isEmpty()) {
+      historySb.append("No questions asked yet. This is the beginning of the interview. You must generate the first, opening question.\n");
+    } else {
+      historySb.append("Here is the conversation history of the interview so far:\n");
+      for (SessionQuestion sq : previousQuestions) {
+        historySb.append("Interviewer: ").append(sq.getQuestionText()).append("\n");
+        historySb.append("Candidate: ").append(sq.getUserTranscript() != null ? sq.getUserTranscript() : "[No response/skipped]").append("\n");
+        historySb.append("\n");
+      }
+    }
+
+    String cvText = buildCvContext(userId);
+    String cvContext = (cvText != null && !cvText.isBlank()) ? cvText : "No CV provided.";
+
     String prompt = """
-        Here are the source questions for this track:
-
+        You are conducting a dynamic, interactive, and open-ended interview for the track: "%s".
+        
+        Candidate CV Context:
         %s
-
-        Generate %d interview questions based on these samples.
-        For each source question, rephrase it or create a real-world scenario that tests the same concept.
-        Distribute the %d questions evenly across the available source questions.
-
-        Return ONLY a JSON array with no other text. Each object must have:
-          - "text": the generated question string
-          - "sourceQuestionId": the numeric ID of the source question it is based on (from the list above)
-
-        Example:
-        [{"text": "Explain how arrays differ from linked lists in memory usage", "sourceQuestionId": 1}]
-        """.formatted(samples, count, count);
+        
+        Sample Reference Questions for this Track (use these for concepts/keywords targets and difficulty calibration):
+        %s
+        
+        %s
+        
+        Based on the track, the CV, and the history, generate the NEXT question.
+        
+        Guidelines:
+        1. If this is the start (no history), generate a friendly but professional open-ended introductory/technical question tailored to their track and CV.
+        2. If there is history:
+           - Evaluate the candidate's last response.
+           - If they left room for clarification, made an interesting technical claim, or did not fully cover the concept, generate an adaptive FOLLOW-UP question (e.g., "You mentioned using X to solve Y, how would you handle Z in that scenario?").
+           - If their answer was complete, transition to a new topic testing another competency from the track sample questions.
+        3. Ensure the question is open-ended, realistic, and directly tests their actual capabilities.
+        
+        Return ONLY a JSON object with no markdown formatting and no extra text. Format:
+        {"text": "your question text here", "sourceQuestionId": null}
+        (Note: set "sourceQuestionId" to the ID of a sample question if it tests the exact same concept/keywords, or null if it is a custom follow-up).
+        """.formatted(trackName, cvContext, samples, historySb.toString());
 
     String response = chatClient.prompt()
         .system(s -> s.text("""
-            You are a technical interview question generator.
-            Your job is to create varied, realistic interview questions that test the same concepts
-            as the provided sample questions but use different wording, real-world scenarios, or angles.
-            Each generated question must link back to its source question via sourceQuestionId.
+            You are an expert interviewer.
+            Generate a single, natural, open-ended question or follow-up question.
+            Return ONLY the JSON object.
             """))
         .user(prompt)
         .call()
         .content();
 
     try {
-      return objectMapper.readValue(response, new TypeReference<List<GeneratedQuestion>>() {
-      });
+      return objectMapper.readValue(stripMarkdown(response), GeneratedQuestion.class);
     } catch (Exception e) {
-      log.warn("Failed to parse LLM response for generateQuestions: {}", response, e);
-      return List.of();
+      log.warn("Failed to parse next question LLM response: {}", response, e);
+      if (!baseQuestions.isEmpty()) {
+        QuestionBank randomQ = baseQuestions.get((int) (Math.random() * baseQuestions.size()));
+        return new GeneratedQuestion(randomQ.getQuestionText(), randomQ.getId());
+      }
+      return new GeneratedQuestion("Can you describe your experience as a " + trackName + "?", null);
     }
   }
 

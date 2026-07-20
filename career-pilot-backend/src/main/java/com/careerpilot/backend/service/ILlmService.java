@@ -5,13 +5,14 @@ import com.careerpilot.backend.annotation.RedactPii;
 import com.careerpilot.backend.dto.response.CvAnalysis;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.ScoreResponse;
+import com.careerpilot.backend.entity.SessionQuestion;
 
 import java.util.List;
 
 public interface ILlmService {
   @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
   @RedactPii
-  List<GeneratedQuestion> generateQuestions(Long trackId, int count);
+  GeneratedQuestion generateNextQuestion(Long trackId, String trackName, Long userId, List<SessionQuestion> previousQuestions);
 
   @RateLimit(capacity = 10, refillTokens = 10, refillSeconds = 60)
   @RedactPii

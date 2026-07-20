@@ -1,24 +1,29 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.dto.request.StartSessionRequest;
+import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
-import com.careerpilot.backend.dto.response.ResumeSessionResponse;
+import com.careerpilot.backend.dto.response.InterviewQuestionDto;
+import com.careerpilot.backend.dto.response.QuestionScoreResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
+import com.careerpilot.backend.dto.response.StartSessionResponse;
+import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.InterviewSession;
+import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IInterviewSessionRepository;
+import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.repository.IUserRepository;
-import com.careerpilot.backend.service.IFeedbackReportService;
 import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
-import com.careerpilot.backend.service.ISessionQuestionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,58 +42,219 @@ public class InterviewSessionService implements IInterviewSessionService {
     private final ISessionQuestionRepository sessionQuestionRepository;
     private final ITrackRepository trackRepository;
     private final IUserRepository userRepository;
+    private final IQuestionBankRepository questionBankRepository;
     private final ILlmService llmService;
-    private final ISessionQuestionService sessionQuestionService;
     private final IQuestionScoreService scoreService;
-    private final IFeedbackReportService feedbackReportService;
+    private final ObjectMapper objectMapper;
+
+    // =====================================================================
+    // START
+    // =====================================================================
 
     @Override
     @Transactional
-    public InterviewSessionResponse startSession(StartSessionRequest request, Long userId) {
+    public StartSessionResponse startSession(StartSessionRequest request, Long userId) {
         log.info("Starting session for user: {}, track: {}", userId, request.getTrackId());
 
-        // 1. Validate track
         Track track = trackRepository.findById(request.getTrackId())
                 .orElseThrow(() -> new RuntimeException("Track not found: " + request.getTrackId()));
 
-        // 2. Load user
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
-        // 3. Create the session
+        int targetMinutes  = request.getDurationMinutes()  != null ? request.getDurationMinutes()  : 15;
+        int maxQuestions   = request.getQuestionCount()    != null ? request.getQuestionCount()    : 10;
+
         InterviewSession session = InterviewSession.builder()
                 .user(user)
                 .track(track)
                 .status(SessionStatus.IN_PROGRESS)
                 .startedAt(LocalDateTime.now())
+                .maxQuestions(maxQuestions)
+                .targetDurationMinutes(targetMinutes)
                 .build();
         session = sessionRepository.save(session);
         log.info("Created session ID: {} for user: {}", session.getId(), userId);
 
-        // 4. Generate questions via LLM
-        List<GeneratedQuestion> generated = llmService.generateQuestions(
-                request.getTrackId(), request.getQuestionCount());
-        if (generated == null || generated.isEmpty()) {
-            throw new RuntimeException("Failed to generate questions for track: " + track.getName());
+        // Generate the first open-ended question via LLM (no pre-loading — every
+        // question is produced dynamically based on what came before).
+        GeneratedQuestion firstQuestion = llmService.generateNextQuestion(
+                track.getId(), track.getName(), userId, List.of());
+        if (firstQuestion == null) {
+            throw new RuntimeException("LLM failed to generate first question for track: " + track.getName());
         }
-        log.info("Generated {} questions via LLM for session ID: {}", generated.size(), session.getId());
 
-        // 5. Delegate SessionQuestion creation to SessionQuestionService
-        List<SessionQuestion> sessionQuestions = sessionQuestionService.createSessionQuestions(session, generated);
+        QuestionBank sourceQ = resolveSourceQuestion(firstQuestion.sourceQuestionId());
+        SessionQuestion sq = SessionQuestion.builder()
+                .session(session)
+                .question(sourceQ)
+                .questionText(firstQuestion.text())
+                .questionOrder(1)
+                .generatedByLlm(true)
+                .build();
+        SessionQuestion savedSq = sessionQuestionRepository.save(sq);
+        log.info("Saved first question (ID: {}) for session ID: {}", savedSq.getId(), session.getId());
 
-        return mapToResponse(session, sessionQuestions);
+        return StartSessionResponse.builder()
+                .sessionId(session.getId())
+                .trackName(track.getName())
+                .targetDurationMinutes(targetMinutes)
+                .maxQuestions(maxQuestions)
+                .startedAt(session.getStartedAt())
+                .currentQuestion(toQuestionResponse(savedSq))
+                .build();
     }
+
+    // =====================================================================
+    // SUBMIT ANSWER
+    // =====================================================================
+
+    @Override
+    @Transactional
+    public SubmitAnswerResponse submitAnswer(Long sessionId, SubmitAnswerRequest request, Long userId) {
+        log.info("Submitting answer for session: {}, user: {}", sessionId, userId);
+
+        // 1. Load & guard session
+        InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+
+        if (session.getStatus() != SessionStatus.IN_PROGRESS) {
+            throw new IllegalStateException(
+                    "Cannot submit answer to a " + session.getStatus().name().toLowerCase() + " session.");
+        }
+
+        // 2. Find the current unanswered question
+        List<SessionQuestion> questions =
+                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
+
+        SessionQuestion current = questions.stream()
+                .filter(q -> q.getCompletedAt() == null)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No active question found for session " + sessionId));
+
+        // 3. Compute pacing from client-supplied word timings
+        List<SubmitAnswerRequest.WordTimingDto> words = request.getWords();
+        long durationMs = request.getDurationMs() != null ? request.getDurationMs() : 0L;
+        double speechRateWpm = 0, avgPauseMs = 0, silenceRatio = 0;
+
+        if (words != null && !words.isEmpty() && durationMs > 0) {
+            double mins = durationMs / 60_000.0;
+            speechRateWpm = words.size() / mins;
+            if (words.size() > 1) {
+                long totalPause = 0;
+                for (int i = 1; i < words.size(); i++) {
+                    long gap = words.get(i).getStartMs() - words.get(i - 1).getEndMs();
+                    if (gap > 0) totalPause += gap;
+                }
+                avgPauseMs    = (double) totalPause / (words.size() - 1);
+                silenceRatio  = (double) totalPause / durationMs;
+            }
+        }
+
+        String wordTimingsJson = null;
+        if (words != null && !words.isEmpty()) {
+            try {
+                wordTimingsJson = objectMapper.writeValueAsString(words);
+            } catch (Exception e) {
+                log.warn("Failed to serialize word timings: {}", e.getMessage());
+            }
+        }
+
+        // 4. Persist the candidate's answer on the current question
+        current.setUserTranscript(request.getTranscript());
+        current.setDurationMs(durationMs);
+        current.setWordTimingsJson(wordTimingsJson);
+        current.setAudioUrl(request.getAudioUrl());
+        current.setSpeechRateWpm(speechRateWpm);
+        current.setAvgPauseMs(avgPauseMs);
+        current.setSilenceRatio(silenceRatio);
+        current.setCompletedAt(LocalDateTime.now());
+        sessionQuestionRepository.save(current);
+
+        // 5. Score the answer synchronously
+        QuestionScoreResponse scoreResponse = null;
+        try {
+            scoreResponse = scoreService.scoreAnswer(current);
+        } catch (Exception e) {
+            log.error("Scoring failed for question ID: {}. Error: {}", current.getId(), e.getMessage());
+        }
+
+        // 6. Determine session completion.
+        //
+        //    PRIMARY  → client-reported sessionElapsedSeconds (authoritative — immune to network jitter).
+        //    FALLBACK → maxQuestions safety cap.
+        //
+        //    We never use LocalDateTime.now() - startedAt here: network congestion would
+        //    inflate that number and terminate the interview early.
+        int answeredSoFar = (int) questions.stream().filter(q -> q.getCompletedAt() != null).count() + 1;
+        int maxQs         = session.getMaxQuestions()           != null ? session.getMaxQuestions()           : 10;
+        int targetSecs    = (session.getTargetDurationMinutes() != null ? session.getTargetDurationMinutes()  : 15) * 60;
+
+        long clientElapsed = request.getSessionElapsedSeconds() != null
+                ? request.getSessionElapsedSeconds() : -1L;
+
+        boolean timeUp;
+        if (clientElapsed >= 0) {
+            timeUp = clientElapsed >= targetSecs;
+        } else {
+            log.warn("Session {}: sessionElapsedSeconds not sent — skipping time check, only cap applies.", sessionId);
+            timeUp = false;
+        }
+        boolean capReached = answeredSoFar >= maxQs;
+
+        // 7. Branch: continue or signal completion (without marking COMPLETED —
+        //    the feedback endpoint owns that transition)
+        InterviewQuestionDto nextQuestion = null;
+
+        if (!timeUp && !capReached) {
+            // Fetch updated history so the LLM can read all answered questions
+            List<SessionQuestion> history =
+                    sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
+
+            GeneratedQuestion nextGq = llmService.generateNextQuestion(
+                    session.getTrack().getId(), session.getTrack().getName(), userId, history);
+
+            QuestionBank sourceQ = resolveSourceQuestion(nextGq.sourceQuestionId());
+            SessionQuestion nextSq = SessionQuestion.builder()
+                    .session(session)
+                    .question(sourceQ)
+                    .questionText(nextGq.text())
+                    .questionOrder(answeredSoFar + 1)
+                    .generatedByLlm(true)
+                    .build();
+            SessionQuestion savedNext = sessionQuestionRepository.save(nextSq);
+            nextQuestion = toQuestionResponse(savedNext);
+            log.info("Generated Q#{} for session {}", answeredSoFar + 1, sessionId);
+        } else {
+            log.info("Session {} ready to complete (timeUp={}, capReached={}). " +
+                     "Awaiting GET /feedback to close.", sessionId, timeUp, capReached);
+        }
+
+        session.setUpdatedAt(LocalDateTime.now());
+        sessionRepository.save(session);
+
+        // sessionStatus: COMPLETED is only set when the frontend calls GET /feedback.
+        // We return READY_TO_COMPLETE here so the frontend knows to route to feedback.
+        String status = (timeUp || capReached) ? "READY_TO_COMPLETE" : SessionStatus.IN_PROGRESS.name();
+
+        return SubmitAnswerResponse.builder()
+                .sessionStatus(status)
+                .score(scoreResponse)
+                .nextQuestion(nextQuestion)
+                .build();
+    }
+
+    // =====================================================================
+    // READ
+    // =====================================================================
 
     @Override
     @Transactional(readOnly = true)
     public List<InterviewSessionResponse> listSessions(Long userId) {
         return sessionRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
-                .map(s -> {
-                    List<SessionQuestion> qs =
-                            sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(s.getId());
-                    return mapToResponse(s, qs);
-                })
+                .map(this::toSessionResponse)
                 .collect(Collectors.toList());
     }
 
@@ -97,119 +263,41 @@ public class InterviewSessionService implements IInterviewSessionService {
     public InterviewSessionResponse getSession(Long sessionId, Long userId) {
         InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
-
-        List<SessionQuestion> questions =
-                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
-        return mapToResponse(session, questions);
+        return toSessionResponse(session);
     }
 
-    @Override
-    @Transactional
-    public InterviewSessionResponse completeSession(Long sessionId, Long userId) {
-        InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+    // =====================================================================
+    // Helpers
+    // =====================================================================
 
-        if (session.getStatus() == SessionStatus.COMPLETED) {
-            throw new IllegalStateException("Session is already completed.");
-        }
-        if (session.getStatus() == SessionStatus.ABANDONED) {
-            throw new IllegalStateException("Cannot complete an abandoned session.");
-        }
-
-        session.setStatus(SessionStatus.COMPLETED);
-        session.setCompletedAt(LocalDateTime.now());
-        session.setUpdatedAt(LocalDateTime.now());
-
-        // Compute duration in seconds
-        if (session.getStartedAt() != null) {
-            long seconds = java.time.Duration.between(session.getStartedAt(), session.getCompletedAt()).getSeconds();
-            session.setDurationSeconds((int) seconds);
-        }
-
-        InterviewSession saved = sessionRepository.save(session);
-        log.info("Completed session ID: {} for user: {}", sessionId, userId);
-
-        try {
-            feedbackReportService.generateFeedbackReport(sessionId, userId);
-        } catch (Exception e) {
-            log.error("Failed to generate feedback report on session completion for session ID: {}", sessionId, e);
-        }
-
-        List<SessionQuestion> questions =
-                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
-        return mapToResponse(saved, questions);
+    private QuestionBank resolveSourceQuestion(Long sourceId) {
+        if (sourceId == null) return null;
+        return questionBankRepository.findById(sourceId).orElse(null);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public ResumeSessionResponse resumeSession(Long sessionId, Long userId) {
-        InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
-
-        List<SessionQuestion> questions =
-                sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
-
-        List<SessionQuestionResponse> answered = questions.stream()
-                .filter(q -> q.getCompletedAt() != null)
-                .map(this::mapToSessionQuestionResponse)
-                .collect(Collectors.toList());
-
-        SessionQuestionResponse nextQuestion = questions.stream()
-                .filter(q -> q.getCompletedAt() == null)
-                .findFirst()
-                .map(this::mapToSessionQuestionResponse)
-                .orElse(null);
-
-        return ResumeSessionResponse.builder()
-                .sessionId(session.getId())
-                .trackId(session.getTrack().getId())
-                .trackName(session.getTrack().getName())
-                .status(session.getStatus().name())
-                .startedAt(session.getStartedAt())
-                .updatedAt(session.getUpdatedAt())
-                .answeredCount(answered.size())
-                .totalCount(questions.size())
-                .answeredQuestions(answered)
-                .nextQuestion(nextQuestion)
-                .build();
-    }
-
-    // ---- Mappers ----
-
-    private InterviewSessionResponse mapToResponse(InterviewSession session, List<SessionQuestion> questions) {
-        List<SessionQuestionResponse> questionResponses = questions.stream()
-                .map(this::mapToSessionQuestionResponse)
-                .collect(Collectors.toList());
-
-        return InterviewSessionResponse.builder()
-                .id(session.getId())
-                .trackId(session.getTrack().getId())
-                .trackName(session.getTrack().getName())
-                .status(session.getStatus().name())
-                .overallScore(session.getOverallScore())
-                .durationSeconds(session.getDurationSeconds())
-                .createdAt(session.getCreatedAt())
-                .startedAt(session.getStartedAt())
-                .completedAt(session.getCompletedAt())
-                .questions(questionResponses)
-                .build();
-    }
-
-    private SessionQuestionResponse mapToSessionQuestionResponse(SessionQuestion sq) {
-        SessionQuestionResponse resp = SessionQuestionResponse.builder()
+    private InterviewQuestionDto toQuestionResponse(SessionQuestion sq) {
+        return InterviewQuestionDto.builder()
                 .id(sq.getId())
                 .sessionId(sq.getSession().getId())
                 .questionText(sq.getQuestionText())
                 .questionOrder(sq.getQuestionOrder())
-                .userTranscript(sq.getUserTranscript())
-                .durationMs(sq.getDurationMs())
-                .speechRateWpm(sq.getSpeechRateWpm())
-                .avgPauseMs(sq.getAvgPauseMs())
-                .silenceRatio(sq.getSilenceRatio())
                 .createdAt(sq.getCreatedAt())
-                .completedAt(sq.getCompletedAt())
                 .build();
-        resp.setScore(scoreService.getScore(sq.getId()));
-        return resp;
+    }
+
+    private InterviewSessionResponse toSessionResponse(InterviewSession s) {
+        return InterviewSessionResponse.builder()
+                .id(s.getId())
+                .trackId(s.getTrack().getId())
+                .trackName(s.getTrack().getName())
+                .status(s.getStatus().name())
+                .overallScore(s.getOverallScore())
+                .durationSeconds(s.getDurationSeconds())
+                .targetDurationMinutes(s.getTargetDurationMinutes())
+                .maxQuestions(s.getMaxQuestions())
+                .startedAt(s.getStartedAt())
+                .completedAt(s.getCompletedAt())
+                .createdAt(s.getCreatedAt())
+                .build();
     }
 }

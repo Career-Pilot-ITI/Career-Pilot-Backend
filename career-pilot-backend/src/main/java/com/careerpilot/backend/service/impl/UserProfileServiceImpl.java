@@ -10,11 +10,14 @@ import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.entity.UserFile;
 import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserSkill;
+import com.careerpilot.backend.entity.RagContextDocument;
+import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.ENUMs.SkillCategory;
 import com.careerpilot.backend.repository.IUserFileRepository;
 import com.careerpilot.backend.repository.IUserProfileRepository;
 import com.careerpilot.backend.repository.IUserRepository;
 import com.careerpilot.backend.repository.IUserSkillRepository;
+import com.careerpilot.backend.repository.IRagContextDocumentRepository;
 import com.careerpilot.backend.service.*;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +55,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
   private final EntityManager entityManager;
   private final ICoinWalletService coinWalletService;
   private final ISubscriptionService subscriptionService;
+  private final IRagContextDocumentRepository ragContextDocumentRepository;
 
   @Value("${app.upload.path:./uploads}")
   private String uploadPath;
@@ -167,6 +171,20 @@ public class UserProfileServiceImpl implements IUserProfileService {
       throw new RuntimeException(
           "Could not extract text from CV. The file may be a scanned image. Please upload a text-based PDF or DOCX.");
     }
+
+    // Save extracted CV text to rag_context_documents as CV_EXTRACT context for LLM question generation/evaluation
+    List<RagContextDocument> existingCvDocs = ragContextDocumentRepository
+            .findByUserIdAndDocTypeOrderByCreatedAtDesc(userId, DocType.CV_EXTRACT);
+    if (!existingCvDocs.isEmpty()) {
+        ragContextDocumentRepository.deleteAll(existingCvDocs);
+    }
+
+    RagContextDocument cvDoc = new RagContextDocument();
+    cvDoc.setUser(userRepository.getReferenceById(userId));
+    cvDoc.setDocType(DocType.CV_EXTRACT);
+    cvDoc.setContent(cvText);
+    cvDoc.setCreatedAt(LocalDateTime.now());
+    ragContextDocumentRepository.save(cvDoc);
 
     CvAnalysis analysis = llmService.analyzeCv(cvText);
 
