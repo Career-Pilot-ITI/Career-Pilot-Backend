@@ -6,20 +6,13 @@ import com.careerpilot.backend.entity.SessionQuestion;
 public interface IQuestionScoreService {
 
     /**
-     * Score a session question answer.
-     * Computes pacing from word timings (arithmetic), calls LLM for text scores,
-     * computes weighted overall score, stores result.
+     * Score a session question's answer.
+     * Computes pacing from word timings, calls LLM for text scores,
+     * computes weighted overall score, and persists the result.
+     * Idempotent — returns the existing score if already scored.
      *
-     * @param sessionQuestion the session question with transcript and word timings populated
+     * @param sessionQuestion the question with transcript and pacing fields populated
      * @return the stored QuestionScoreResponse
      */
     QuestionScoreResponse scoreAnswer(SessionQuestion sessionQuestion);
-
-    /**
-     * Get an existing score for a session question.
-     *
-     * @param sessionQuestionId the session question ID
-     * @return the QuestionScoreResponse, or null if not scored yet
-     */
-    QuestionScoreResponse getScore(Long sessionQuestionId);
 }

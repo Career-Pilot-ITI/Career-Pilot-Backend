@@ -107,7 +107,6 @@ public class QuestionScoreService implements IQuestionScoreService {
     return mapToResponse(saved);
   }
 
-  @Override
   @Transactional(readOnly = true)
   public QuestionScoreResponse getScore(Long sessionQuestionId) {
     return scoreRepository.findBySessionQuestionId(sessionQuestionId)
