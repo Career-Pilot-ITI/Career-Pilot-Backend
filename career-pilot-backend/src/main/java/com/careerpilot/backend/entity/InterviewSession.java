@@ -40,6 +40,12 @@ public class InterviewSession {
     @Column(name = "overall_score")
     private Integer overallScore;     // 0-100
 
+    @Column(name = "max_questions", nullable = false)
+    private Integer maxQuestions = 10;
+
+    @Column(name = "target_duration_minutes", nullable = false)
+    private Integer targetDurationMinutes = 15;
+
     @Column(name = "rag_context_ids")
     private String ragContextIds;     // JSON array or comma-separated
 
