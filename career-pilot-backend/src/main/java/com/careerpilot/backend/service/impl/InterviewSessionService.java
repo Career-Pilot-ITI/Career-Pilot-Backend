@@ -65,7 +65,6 @@ public class InterviewSessionService implements IInterviewSessionService {
   private final ILlmService llmService;
   private final IQuestionScoreService scoreService;
   private final ICoinWalletService coinWalletService;
-  private final SessionPricingConfig sessionPricingConfig;
   private final ObjectMapper objectMapper;
 
   // =====================================================================
@@ -351,7 +350,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     if (monthlyCount >= 1) {
       try {
-        coinWalletService.debit(userId, sessionPricingConfig.getCoinCost());
+        coinWalletService.debit(userId, 50);
       } catch (WalletException.InsufficientBalanceException e) {
         throw new SessionQuotaException.QuotaExceededException(
                 "You have 0 sessions remaining. Subscribe or buy coins.");
