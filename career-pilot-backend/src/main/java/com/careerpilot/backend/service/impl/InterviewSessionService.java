@@ -1,6 +1,5 @@
 package com.careerpilot.backend.service.impl;
 
-import com.careerpilot.backend.config.SessionPricingConfig;
 import com.careerpilot.backend.controller.advice.WalletException;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
@@ -13,16 +12,6 @@ import com.careerpilot.backend.dto.response.SessionStateResponse;
 import com.careerpilot.backend.dto.response.StartSessionResponse;
 import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 import com.careerpilot.backend.controller.advice.SessionQuotaException;
-import com.careerpilot.backend.dto.request.StartSessionRequest;
-import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
-import com.careerpilot.backend.dto.response.GeneratedQuestion;
-import com.careerpilot.backend.dto.response.InterviewQuestionDto;
-import com.careerpilot.backend.dto.response.InterviewSessionResponse;
-import com.careerpilot.backend.dto.response.QuestionScoreResponse;
-import com.careerpilot.backend.dto.response.SessionQuestionResponse;
-import com.careerpilot.backend.dto.response.SessionStateResponse;
-import com.careerpilot.backend.dto.response.StartSessionResponse;
-import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.InterviewSession;
