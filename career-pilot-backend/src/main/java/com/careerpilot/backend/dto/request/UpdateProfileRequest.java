@@ -19,13 +19,6 @@ public class UpdateProfileRequest {
     @Schema(example = "amr.shams@example.com")
     private String email;
 
-    @Schema(example = "currentPass123", description = "Required when setting a new password")
-    private String currentPassword;
-
-    @Size(min = 6, message = "Password must be at least 6 characters")
-    @Schema(example = "newPass456")
-    private String newPassword;
-
     @Schema(example = "Amr Shams")
     private String displayName;
 

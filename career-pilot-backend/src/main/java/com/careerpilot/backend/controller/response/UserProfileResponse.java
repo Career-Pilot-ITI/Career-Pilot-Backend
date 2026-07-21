@@ -9,6 +9,8 @@ import java.util.List;
 
 @Data
 public class UserProfileResponse {
+  private Long id;
+  private String phoneNumber;
   private String displayName;
   private String username;
   private String email;
@@ -35,6 +37,8 @@ public class UserProfileResponse {
     UserProfileResponse r = new UserProfileResponse();
 
     if (profile.getUser() != null) {
+      r.setId(profile.getUser().getId());
+      r.setPhoneNumber(profile.getUser().getPhoneNumber());
       r.setUsername(profile.getUser().getUsername());
       r.setEmail(profile.getUser().getEmail());
     }
