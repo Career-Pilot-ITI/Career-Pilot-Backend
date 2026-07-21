@@ -196,7 +196,7 @@ CREATE TABLE subscriptions (
     started_at TIMESTAMP,
     cancelled_at TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    free_trial_used BOOLEAN NOT NULL DEFAULT FALSE;
+    free_trial_used BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP
 );
