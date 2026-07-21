@@ -87,6 +87,10 @@ tier-pricing:
   prices:
     PLUS: 199.0
     PRO: 349.0
+
+session-pricing:
+  coin-cost: 50
+
 security:
   jwt:
     secret-key: ${JWT_SECRET}
