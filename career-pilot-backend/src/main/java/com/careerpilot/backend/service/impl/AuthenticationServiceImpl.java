@@ -81,7 +81,7 @@ public class AuthenticationServiceImpl implements IAuthentication {
       isNewUser = true;
       user = new User();
       user.setPhoneNumber(phoneNumber);
-      user.setUsername("user_" + phoneNumber.substring(Math.max(0, phoneNumber.length() - 6)));
+      user.setUsername("user_" + phoneNumber.replaceAll("[^0-9]", ""));
       user.setEnabled(true);
       user.setCreatedAt(LocalDateTime.now());
 
