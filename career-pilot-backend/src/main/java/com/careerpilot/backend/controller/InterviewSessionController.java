@@ -6,6 +6,7 @@ import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.FeedbackReportResponse;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
+import com.careerpilot.backend.dto.response.SessionStateResponse;
 import com.careerpilot.backend.dto.response.StartSessionResponse;
 import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 import com.careerpilot.backend.security.jwt.CustomUserDetails;
@@ -137,6 +138,37 @@ public class InterviewSessionController {
                 .success(true)
                 .message("Feedback report ready")
                 .data(report)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    /**
+     * GET /api/v1/interviews/sessions/{sessionId}/state
+     *
+     * Network-drop recovery endpoint.
+     *
+     * Returns the current session state: session metadata, answered questions with
+     * scores (if available), and the current unanswered question the candidate
+     * should answer next. The mobile app calls this after reconnecting to
+     * re-render the interview screen without needing multiple round-trips.
+     *
+     * Works for IN_PROGRESS sessions. Returns 404 if session not found or does
+     * not belong to the authenticated user.
+     */
+    @GetMapping("/{sessionId}/state")
+    @Operation(
+            summary = "Get session state for network-drop recovery",
+            description = "Returns session metadata, answered questions, and the current unanswered question. " +
+                          "Call this after reconnecting to re-render the interview without multiple round-trips."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session state",
+        content = @Content(schema = @Schema(implementation = SessionStateResponse.class)))
+    public ResponseEntity<ApiResponse> getSessionState(@PathVariable Long sessionId) {
+        SessionStateResponse state = sessionService.getSessionState(sessionId, getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.builder()
+                .success(true)
+                .message("Session state retrieved")
+                .data(state)
                 .timestamp(LocalDateTime.now())
                 .build());
     }

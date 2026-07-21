@@ -12,7 +12,7 @@ import java.util.List;
 public interface ILlmService {
   @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
   @RedactPii
-  GeneratedQuestion generateNextQuestion(Long trackId, String trackName, Long userId, List<SessionQuestion> previousQuestions);
+  GeneratedQuestion generateNextQuestion(Long trackId, String trackName, String trackDescription, Long userId, List<SessionQuestion> previousQuestions);
 
   @RateLimit(capacity = 10, refillTokens = 10, refillSeconds = 60)
   @RedactPii

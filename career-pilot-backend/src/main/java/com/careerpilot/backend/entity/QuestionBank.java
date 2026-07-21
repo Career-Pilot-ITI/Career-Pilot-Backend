@@ -9,7 +9,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "question_bank")
@@ -49,10 +48,6 @@ public class QuestionBank {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    // Relationships
-    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL)
-    private List<UserQuestionHistory> history;
 
     @PrePersist
     protected void onCreate() {
