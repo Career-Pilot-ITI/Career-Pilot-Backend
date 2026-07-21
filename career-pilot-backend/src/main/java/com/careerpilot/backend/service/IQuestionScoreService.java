@@ -15,4 +15,12 @@ public interface IQuestionScoreService {
      * @return the stored QuestionScoreResponse
      */
     QuestionScoreResponse scoreAnswer(SessionQuestion sessionQuestion);
+
+    /**
+     * Retrieve a previously-saved score for a session question.
+     *
+     * @param sessionQuestionId the session question's ID
+     * @return the score response, or null if not yet scored
+     */
+    QuestionScoreResponse getScore(Long sessionQuestionId);
 }
