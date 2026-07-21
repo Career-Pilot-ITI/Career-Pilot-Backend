@@ -44,7 +44,7 @@ public class LlmServiceImpl implements ILlmService {
   private final IQuestionScoreRepository questionScoreRepository;
 
   @Override
-  public GeneratedQuestion generateNextQuestion(Long trackId, String trackName, Long userId, List<SessionQuestion> previousQuestions) {
+  public GeneratedQuestion generateNextQuestion(Long trackId, String trackName, String trackDescription, Long userId, List<SessionQuestion> previousQuestions) {
     List<QuestionBank> baseQuestions = questionBankRepository.findByTrackIdAndIsActiveTrue(trackId);
     if (baseQuestions.isEmpty()) {
       baseQuestions = questionBankRepository.findByTrackId(trackId);
@@ -67,10 +67,13 @@ public class LlmServiceImpl implements ILlmService {
     }
 
     String cvText = buildCvContext(userId);
+    String desc = (trackDescription != null && !trackDescription.isBlank()) ? trackDescription : "Assess the candidate's skills for this role.";
     String cvContext = (cvText != null && !cvText.isBlank()) ? cvText : "No CV provided.";
 
     String prompt = """
         You are conducting a dynamic, interactive, and open-ended interview for the track: "%s".
+        
+        Track Objective: %s
         
         Candidate CV Context:
         %s
@@ -80,7 +83,7 @@ public class LlmServiceImpl implements ILlmService {
         
         %s
         
-        Based on the track, the CV, and the history, generate the NEXT question.
+        Based on the track objective, the CV, and the history, generate the NEXT question.
         
         Guidelines:
         1. If this is the start (no history), generate a friendly but professional open-ended introductory/technical question tailored to their track and CV.
@@ -89,11 +92,12 @@ public class LlmServiceImpl implements ILlmService {
            - If they left room for clarification, made an interesting technical claim, or did not fully cover the concept, generate an adaptive FOLLOW-UP question (e.g., "You mentioned using X to solve Y, how would you handle Z in that scenario?").
            - If their answer was complete, transition to a new topic testing another competency from the track sample questions.
         3. Ensure the question is open-ended, realistic, and directly tests their actual capabilities.
+        4. Anchor every question to the track objective above — do not drift into unrelated topics.
         
         Return ONLY a JSON object with no markdown formatting and no extra text. Format:
         {"text": "your question text here", "sourceQuestionId": null}
         (Note: set "sourceQuestionId" to the ID of a sample question if it tests the exact same concept/keywords, or null if it is a custom follow-up).
-        """.formatted(trackName, cvContext, samples, historySb.toString());
+        """.formatted(trackName, desc, cvContext, samples, historySb.toString());
 
     String response = chatClient.prompt()
         .system(s -> s.text("""
