@@ -5,6 +5,7 @@ import com.careerpilot.backend.controller.response.PaymentInitiationResponse;
 import com.careerpilot.backend.dto.payment.PaymentEventResult;
 import com.careerpilot.backend.dto.payment.PaymentInitiationRequest;
 import com.careerpilot.backend.dto.payment.PaymentInitiationResult;
+import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
 import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.PaymentTransaction;
@@ -71,7 +72,8 @@ public class PaymentServiceImpl implements IPaymentService {
         if (event.isSuccess()) {
             transactionService.markConfirmed(tx, event.getProviderTransactionId(), event.getRawPayload());
             if (tx.getCoinPackSize() != null) {
-                coinWalletService.credit(tx.getUser().getId(), tx.getCoinPackSize());
+                coinWalletService.credit(tx.getUser().getId(), tx.getCoinPackSize(),
+                        CoinLedgerReason.TOP_UP, tx.getMerchantOrderId());
             } else if (tx.getTierPurchased() != null) {
                 SubscriptionTier tier = SubscriptionTier.valueOf(tx.getTierPurchased());
                 subscriptionService.upgrade(tx.getUser(), tier);
