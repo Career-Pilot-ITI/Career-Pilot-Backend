@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1/wallet")
 @RequiredArgsConstructor
@@ -50,5 +52,11 @@ public class CoinWalletController {
         return paymentService.initiatePayment(
                 userDetails.getUser(), price, request.getCurrency(), request.getMethod(),
                 PaymentProvider.PAYMOB, "COIN_PACK", request.getCoinPackSize(), null);
+    }
+    @GetMapping("/coin-packs")
+    @Operation(summary = "Get available coin pack prices",
+            description = "Returns each configured coin pack size mapped to its price.")
+    public Map<Integer, Double> coinPacks() {
+        return coinPackConfig.getPrices();
     }
 }
