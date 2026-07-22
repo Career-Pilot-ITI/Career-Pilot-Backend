@@ -21,6 +21,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -179,14 +183,20 @@ public class InterviewSessionController {
 
     /**
      * GET /api/v1/interviews/sessions
-     * List all sessions for the authenticated user, newest first (metadata only — no questions).
+     * List sessions for the authenticated user (paginated, sorted by createdAt DESC).
      */
     @GetMapping
-    @Operation(summary = "List user's interview sessions")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sessions list",
-        content = @Content(array = @ArraySchema(schema = @Schema(implementation = InterviewSessionResponse.class))))
-    public ResponseEntity<ApiResponse> listSessions() {
-        List<InterviewSessionResponse> sessions = sessionService.listSessions(getCurrentUserId());
+    @Operation(
+            summary = "List user's interview sessions (paginated)",
+            description = "Returns a paginated list of past interview sessions for the authenticated user, sorted by date descending."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Paginated list of sessions",
+        content = @Content(schema = @Schema(implementation = Page.class)))
+    public ResponseEntity<ApiResponse> listSessions(
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<InterviewSessionResponse> sessions = sessionService.listSessions(getCurrentUserId(), pageable);
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
                 .message("Sessions retrieved")
