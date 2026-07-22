@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/interviews/sessions")
@@ -256,6 +257,13 @@ public class InterviewSessionController {
                 .data(question)
                 .timestamp(LocalDateTime.now())
                 .build());
+    }
+
+    @GetMapping("/price")
+    @Operation(summary = "Get the coin cost of a single interview session",
+            description = "Returns the current coin cost charged when a session consumes the coin fallback (quota exhausted, insufficient subscription).")
+    public Map<String, Integer> sessionPrice() {
+        return Map.of("coinCost", 50);
     }
 
     // =====================================================================
