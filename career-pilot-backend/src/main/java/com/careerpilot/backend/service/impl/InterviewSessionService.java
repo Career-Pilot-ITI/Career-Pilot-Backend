@@ -12,6 +12,7 @@ import com.careerpilot.backend.dto.response.SessionStateResponse;
 import com.careerpilot.backend.dto.response.StartSessionResponse;
 import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 import com.careerpilot.backend.controller.advice.SessionQuotaException;
+import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.InterviewSession;
@@ -339,7 +340,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     if (monthlyCount >= 1) {
       try {
-        coinWalletService.debit(userId, 50);
+        coinWalletService.debit(userId, 50, CoinLedgerReason.SESSION_SPEND, null);
       } catch (WalletException.InsufficientBalanceException e) {
         throw new SessionQuotaException.QuotaExceededException(
                 "You have 0 sessions remaining. Subscribe or buy coins.");
