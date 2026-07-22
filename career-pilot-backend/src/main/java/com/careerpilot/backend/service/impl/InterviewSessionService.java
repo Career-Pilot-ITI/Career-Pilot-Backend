@@ -33,6 +33,8 @@ import com.careerpilot.backend.service.IQuestionScoreService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -287,6 +289,13 @@ public class InterviewSessionService implements IInterviewSessionService {
 
   @Override
   @Transactional(readOnly = true)
+  public Page<InterviewSessionResponse> listSessions(Long userId, Pageable pageable) {
+    return sessionRepository.findByUserId(userId, pageable)
+        .map(this::toSessionResponse);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public InterviewSessionResponse getSession(Long sessionId, Long userId) {
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
         .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
@@ -370,9 +379,10 @@ public class InterviewSessionService implements IInterviewSessionService {
   private InterviewSessionResponse toSessionResponse(InterviewSession s) {
     return InterviewSessionResponse.builder()
         .id(s.getId())
-        .trackId(s.getTrack().getId())
-        .trackName(s.getTrack().getName())
-        .status(s.getStatus().name())
+        .sessionId(s.getId())
+        .trackId(s.getTrack() != null ? s.getTrack().getId() : null)
+        .trackName(s.getTrack() != null ? s.getTrack().getName() : null)
+        .status(s.getStatus() != null ? s.getStatus().name() : null)
         .overallScore(s.getOverallScore())
         .durationSeconds(s.getDurationSeconds())
         .targetDurationMinutes(s.getTargetDurationMinutes())
