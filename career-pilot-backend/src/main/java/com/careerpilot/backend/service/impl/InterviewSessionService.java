@@ -323,7 +323,7 @@ public class InterviewSessionService implements IInterviewSessionService {
               return defaultFree;
             });
 
-    if (sub.getTier() == SubscriptionTier.PLUS || sub.getTier() == SubscriptionTier.PRO) return;
+    if (sub.getTier() == SubscriptionTier.PLUS || sub.getTier() == SubscriptionTier.PRO  || sub.getTier()==SubscriptionTier.FREE) return;
 
     if (!sub.getFreeTrialUsed()) {
       long totalSessions = sessionRepository.countByUserId(userId);
