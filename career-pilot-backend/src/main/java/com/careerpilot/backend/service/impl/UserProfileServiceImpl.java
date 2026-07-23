@@ -103,12 +103,17 @@ public class UserProfileServiceImpl implements IUserProfileService {
     if (request.getYearsOfExperience() != null)
       profile.setYearsOfExperience(request.getYearsOfExperience());
 
-    if (request.getAvatarFileId() != null) {
+    if (request.getAvatarUrl() != null) {
+      profile.setAvatarUrl(request.getAvatarUrl());
+    } else if (request.getAvatarFileId() != null) {
       UserFile avatarFile = fileRepository.findByIdAndUserId(request.getAvatarFileId(), userId)
           .orElseThrow(() -> new RuntimeException("Avatar file not found or does not belong to you"));
       profile.setAvatarUrl(avatarFile.getStoredPath());
     }
-    if (request.getCvFileId() != null) {
+
+    if (request.getCvUrl() != null) {
+      profile.setCvUrl(request.getCvUrl());
+    } else if (request.getCvFileId() != null) {
       UserFile cvFile = fileRepository.findByIdAndUserId(request.getCvFileId(), userId)
           .orElseThrow(() -> new RuntimeException("CV file not found or does not belong to you"));
       profile.setCvUrl(cvFile.getStoredPath());
