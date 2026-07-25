@@ -22,6 +22,9 @@ public class UpdateProfileRequest {
     @Schema(example = "Amr Shams")
     private String displayName;
 
+    @Schema(example = "/api/v1/files/avatars/1/86361a4f-c446-4e58-85aa-5b4d1b82ff63.png", description = "URL of the avatar file")
+    private String avatarUrl;
+
     @Schema(example = "7", description = "ID of an uploaded avatar file (from /api/v1/files/upload)")
     private Long avatarFileId;
 
@@ -46,6 +49,9 @@ public class UpdateProfileRequest {
 
     @Schema(example = "5")
     private Integer yearsOfExperience;
+
+    @Schema(example = "/api/v1/files/cvs/1/86361a4f-c446-4e58-85aa-5b4d1b82ff63.pdf", description = "URL of the CV file")
+    private String cvUrl;
 
     @Schema(example = "42", description = "ID of an uploaded CV file (from /api/v1/files/upload)")
     private Long cvFileId;
