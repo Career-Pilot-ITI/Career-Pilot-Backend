@@ -92,7 +92,7 @@ Paymob needs to reach your local machine over the public internet to deliver web
 
 ```powershell
 winget install --id Cloudflare.cloudflared
-cloudflared tunnel --url http://localhost:7070
+cloudflared tunnel --url http://localhost:8080
 ```
 No signup required for a quick/anonymous tunnel. Copy the printed `https://....trycloudflare.com` URL.
 
@@ -140,11 +140,11 @@ PAYMOB_NOTIFICATION_URL=   # filled in next step
 ngrok http <backend host port>
 ```
 
-> Check the actual host port your backend is mapped to first — `docker ps` shows the real mapping (e.g. `0.0.0.0:7070->8080/tcp`), which may differ from the container-internal port in `docker-compose.yml`.
+> Check the actual host port your backend is mapped to first — `docker ps` shows the real mapping (e.g. `0.0.0.0:8080->8080/tcp`), which may differ from the container-internal port in `docker-compose.yml`.
 
 Copy the forwarding URL it prints, e.g.:
 ```
-Forwarding   https://a1b2c3d4.ngrok-free.app -> http://localhost:7070
+Forwarding   https://a1b2c3d4.ngrok-free.app -> http://localhost:8080
 ```
 
 Set in `.env`:
