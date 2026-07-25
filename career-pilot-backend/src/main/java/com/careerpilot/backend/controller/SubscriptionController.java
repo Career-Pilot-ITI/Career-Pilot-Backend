@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1/subscriptions")
 @RequiredArgsConstructor
@@ -71,5 +73,11 @@ public class SubscriptionController {
             description = "Schedules cancellation at the end of the current billing cycle. No immediate change, no mid-cycle clawback.")
     public void cancel(@AuthenticationPrincipal CustomUserDetails userDetails) {
         subscriptionService.cancel(userDetails.getUser().getId());
+    }
+    @GetMapping("/tiers")
+    @Operation(summary = "Get available subscription tier prices",
+            description = "Returns each paid tier mapped to its price. FREE is not included since it has no cost.")
+    public Map<String, Double> tiers() {
+        return tierPricingConfig.getPrices();
     }
 }
