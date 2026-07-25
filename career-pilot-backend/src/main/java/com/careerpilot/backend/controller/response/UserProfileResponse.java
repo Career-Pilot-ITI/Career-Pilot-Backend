@@ -32,6 +32,7 @@ public class UserProfileResponse {
   private Integer coinBalance;
   private Boolean onboardingCompleted;
   private String trackName;
+  private Long trackId;
 
   public static UserProfileResponse from(UserProfile profile, String liveTier, int liveCoinBalance) {
     UserProfileResponse r = new UserProfileResponse();
@@ -61,6 +62,7 @@ public class UserProfileResponse {
     r.setOnboardingCompleted(profile.getOnboardingCompleted());
     if (profile.getTrack() != null) {
       r.setTrackName(profile.getTrack().getName());
+      r.setTrackId(profile.getTrack().getId());
     }
 
     return r;
