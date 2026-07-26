@@ -11,6 +11,7 @@ import com.careerpilot.backend.service.IUserSkillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -42,7 +43,7 @@ public class QuestionScoreService implements IQuestionScoreService {
   private final IUserSkillService userSkillService;
 
   @Override
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public QuestionScoreResponse scoreAnswer(SessionQuestion sessionQuestion) {
     log.info("Scoring answer for session question ID: {}", sessionQuestion.getId());
 
@@ -57,14 +58,27 @@ public class QuestionScoreService implements IQuestionScoreService {
     int pacingScore = computePacingScore(sessionQuestion);
     log.debug("Pacing score: {} for question ID: {}", pacingScore, sessionQuestion.getId());
 
-    // 2. Call LLM with questionId + userId so the impl can load RAG context
+    // 2. Fallback to neutral scores when transcript is missing (e.g. words:[] + empty speech)
+    String transcript = sessionQuestion.getUserTranscript();
+    if (transcript == null || transcript.isBlank()) {
+      log.warn("No transcript for question ID: {} — returning neutral scores", sessionQuestion.getId());
+      QuestionScore neutral = QuestionScore.builder()
+          .sessionQuestion(sessionQuestion)
+          .contentRelevance(0).clarity(0).confidence(0)
+          .fillerWords(100).pacing(pacingScore).overallScore(0)
+          .build();
+      neutral.calculateOverallScore();
+      QuestionScore saved = scoreRepository.save(neutral);
+      return mapToResponse(saved);
+    }
+
+    // 3. Call LLM with questionId + userId so the impl can load RAG context
     Long questionId = sessionQuestion.getQuestion() != null
         ? sessionQuestion.getQuestion().getId()
         : null;
     Long userId = sessionQuestion.getSession().getUser().getId();
 
-    ScoreResponse llmResult = llmService.scoreAnswer(questionId, userId,
-        sessionQuestion.getUserTranscript());
+    ScoreResponse llmResult = llmService.scoreAnswer(questionId, userId, transcript);
     log.debug("LLM scores — content:{}, clarity:{}, confidence:{}, filler:{}",
         llmResult.contentRelevance(), llmResult.clarity(),
         llmResult.confidence(), llmResult.fillerWords());
@@ -128,8 +142,9 @@ public class QuestionScoreService implements IQuestionScoreService {
    */
   private int computePacingScore(SessionQuestion sq) {
     Double wpm = sq.getSpeechRateWpm();
+    // null, 0, or -1 (sentinel for "no word timings provided") → neutral default
     if (wpm == null || wpm <= 0) {
-      return 50; // no timing data — neutral default
+      return 50;
     }
 
     int score;

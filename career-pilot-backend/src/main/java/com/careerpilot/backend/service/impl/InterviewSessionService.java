@@ -141,9 +141,12 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     List<SubmitAnswerRequest.WordTimingDto> words = request.getWords();
     long durationMs = request.getDurationMs() != null ? request.getDurationMs() : 0L;
-    double speechRateWpm = 0, avgPauseMs = 0, silenceRatio = 0;
+    // Use -1 as sentinel: no timing data → QuestionScoreService returns neutral pacing (50)
+    double speechRateWpm = -1, avgPauseMs = 0, silenceRatio = 0;
 
-    if (words != null && !words.isEmpty() && durationMs > 0) {
+    boolean hasWords = words != null && !words.isEmpty();
+
+    if (hasWords && durationMs > 0) {
       double mins = durationMs / 60_000.0;
       speechRateWpm = words.size() / mins;
       if (words.size() > 1) {
@@ -159,7 +162,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     }
 
     String wordTimingsJson = null;
-    if (words != null && !words.isEmpty()) {
+    if (hasWords) {
       try {
         wordTimingsJson = objectMapper.writeValueAsString(words);
       } catch (Exception e) {
