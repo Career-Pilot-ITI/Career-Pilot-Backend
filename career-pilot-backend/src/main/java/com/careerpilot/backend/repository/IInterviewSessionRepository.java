@@ -2,6 +2,8 @@ package com.careerpilot.backend.repository;
 
 import com.careerpilot.backend.entity.InterviewSession;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +17,8 @@ import java.util.Optional;
 public interface IInterviewSessionRepository extends JpaRepository<InterviewSession, Long> {
 
     List<InterviewSession> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    Page<InterviewSession> findByUserId(Long userId, Pageable pageable);
 
     Optional<InterviewSession> findByIdAndUserId(Long id, Long userId);
 

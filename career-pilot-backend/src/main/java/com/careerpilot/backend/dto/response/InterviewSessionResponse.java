@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class InterviewSessionResponse {
     private Long id;
+    private Long sessionId;
     private Long trackId;
     private String trackName;
     private String status;
