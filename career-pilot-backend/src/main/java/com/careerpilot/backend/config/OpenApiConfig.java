@@ -10,9 +10,12 @@ import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
@@ -25,7 +28,16 @@ public class OpenApiConfig {
         .addMediaType("application/json", new MediaType()
             .schema(new Schema<>().$ref(API_RESPONSE_REF)));
 
+    Server prodServer = new Server()
+        .url("https://career-pilot-backend-production.up.railway.app")
+        .description("Production Server");
+
+    Server localServer = new Server()
+        .url("http://localhost:8080")
+        .description("Local Development Server");
+
     return new OpenAPI()
+        .servers(List.of(prodServer, localServer))
         .info(new Info()
             .title("Career Pilot API")
             .description("Backend API for The Career Pilot  authentication & authorization service")
