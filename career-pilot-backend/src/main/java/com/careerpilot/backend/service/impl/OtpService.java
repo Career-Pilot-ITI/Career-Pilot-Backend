@@ -69,8 +69,10 @@ public class OtpService implements IOtpService {
       throw new OtpResendLimitException("Maximum resend limit reached. Try again later.");
     }
 
-    String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 999999));
-
+    // check if it is testing? 
+    String code = "wireweb".equalsIgnoreCase(otpProvider)
+        ? String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000))
+        : "123456";
     try {
       String otpData = objectMapper.writeValueAsString(Map.of(
           "code", code,
