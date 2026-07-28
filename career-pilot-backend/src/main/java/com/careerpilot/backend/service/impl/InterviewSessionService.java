@@ -189,7 +189,7 @@ public class InterviewSessionService implements IInterviewSessionService {
       log.error("Scoring failed for question ID: {}. Error: {}", current.getId(), e.getMessage());
     }
 
-    int answeredSoFar = (int) questions.stream().filter(q -> q.getCompletedAt() != null).count() + 1;
+    int answeredCount = (int) questions.stream().filter(q -> q.getCompletedAt() != null).count();
     int maxQs = session.getMaxQuestions() != null ? session.getMaxQuestions() : 10;
     int targetSecs = (session.getTargetDurationMinutes() != null ? session.getTargetDurationMinutes() : 15) * 60;
 
@@ -204,7 +204,7 @@ public class InterviewSessionService implements IInterviewSessionService {
       log.warn("Session {}: sessionElapsedSeconds not sent — skipping time check, only cap applies.", sessionId);
       timeUp = false;
     }
-    boolean capReached = answeredSoFar >= maxQs;
+    boolean capReached = answeredCount >= maxQs;
 
     InterviewQuestionDto nextQuestion = null;
 
@@ -220,12 +220,12 @@ public class InterviewSessionService implements IInterviewSessionService {
           .session(session)
           .question(sourceQ)
           .questionText(nextGq.text())
-          .questionOrder(answeredSoFar + 1)
+          .questionOrder(answeredCount + 1)
           .generatedByLlm(true)
           .build();
       SessionQuestion savedNext = sessionQuestionRepository.save(nextSq);
       nextQuestion = toQuestionResponse(savedNext);
-      log.info("Generated Q#{} for session {}", answeredSoFar + 1, sessionId);
+      log.info("Generated Q#{} for session {}", answeredCount + 1, sessionId);
     } else {
       log.info("Session {} ready to complete (timeUp={}, capReached={}). " +
           "Awaiting GET /feedback to close.", sessionId, timeUp, capReached);

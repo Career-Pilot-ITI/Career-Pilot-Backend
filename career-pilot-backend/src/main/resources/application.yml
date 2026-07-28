@@ -12,6 +12,11 @@ spring:
     username: ${DB_USERNAME:career_pilot}
     password: ${DB_PASSWORD:career_pilot}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 10000
+      validation-timeout: 3000
+      max-lifetime: 540000
+      keepalive-time: 30000
 
   jpa:
     hibernate:
