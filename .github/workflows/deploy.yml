@@ -33,6 +33,7 @@ jobs:
             sg docker -c "
             cd /teams/team1/app
             echo '${{ secrets.ENV_FILE }}' > .env
-            docker compose down --remove-orphans
-            docker compose up -d --build
+            docker compose down --remove-orphans || true
+            docker rm -f team1-career-pilot-api 2>/dev/null || true
+            docker compose up -d --build --force-recreate
             "

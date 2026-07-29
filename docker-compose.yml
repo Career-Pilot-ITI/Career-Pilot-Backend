@@ -16,6 +16,7 @@ services:
       - "traefik.http.routers.team1-backend.rule=PathPrefix(`/team1`)"
       - "traefik.docker.network=iti"
     environment:
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       SERVER_SERVLET_CONTEXT_PATH: /team1
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}

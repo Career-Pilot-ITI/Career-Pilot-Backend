@@ -28,8 +28,12 @@ public class OpenApiConfig {
         .addMediaType("application/json", new MediaType()
             .schema(new Schema<>().$ref(API_RESPONSE_REF)));
 
-    Server prodServer = new Server()
+    Server testServer = new Server()
         .url("https://career-pilot-backend-production.up.railway.app")
+        .description("Testing Server");
+
+    Server prodServer = new Server()
+        .url("http://35.95.57.158/team1")
         .description("Production Server");
 
     Server localServer = new Server()
@@ -37,7 +41,7 @@ public class OpenApiConfig {
         .description("Local Development Server");
 
     return new OpenAPI()
-        .servers(List.of(prodServer, localServer))
+        .servers(List.of(prodServer, testServer,localServer))
         .info(new Info()
             .title("Career Pilot API")
             .description("Backend API for The Career Pilot  authentication & authorization service")
