@@ -17,12 +17,14 @@ import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.InterviewSession;
 import com.careerpilot.backend.entity.QuestionBank;
+import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.entity.Subscription;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IInterviewSessionRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
+import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.careerpilot.backend.repository.ISubscriptionRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
@@ -31,6 +33,8 @@ import com.careerpilot.backend.service.ICoinWalletService;
 import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
+import com.careerpilot.backend.service.IUserSkillService;
+import com.careerpilot.backend.service.agent.InterviewAgentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,9 +58,12 @@ public class InterviewSessionService implements IInterviewSessionService {
   private final ITrackRepository trackRepository;
   private final IUserRepository userRepository;
   private final IQuestionBankRepository questionBankRepository;
+  private final IQuestionScoreRepository questionScoreRepository;
   private final ILlmService llmService;
   private final IQuestionScoreService scoreService;
   private final ICoinWalletService coinWalletService;
+  private final IUserSkillService userSkillService;
+  private final InterviewAgentService interviewAgentService;
   private final ObjectMapper objectMapper;
 
   // =====================================================================
@@ -182,13 +189,6 @@ public class InterviewSessionService implements IInterviewSessionService {
     current.setCompletedAt(LocalDateTime.now());
     sessionQuestionRepository.save(current);
 
-    QuestionScoreResponse scoreResponse = null;
-    try {
-      scoreResponse = scoreService.scoreAnswer(current);
-    } catch (Exception e) {
-      log.error("Scoring failed for question ID: {}. Error: {}", current.getId(), e.getMessage());
-    }
-
     int answeredCount = (int) questions.stream().filter(q -> q.getCompletedAt() != null).count();
     int maxQs = session.getMaxQuestions() != null ? session.getMaxQuestions() : 10;
     int targetSecs = (session.getTargetDurationMinutes() != null ? session.getTargetDurationMinutes() : 15) * 60;
@@ -206,35 +206,81 @@ public class InterviewSessionService implements IInterviewSessionService {
     }
     boolean capReached = answeredCount >= maxQs;
 
-    InterviewQuestionDto nextQuestion = null;
-
-    if (!timeUp && !capReached) {
+    com.careerpilot.backend.service.agent.AgentResponse agentResponse = null;
+    try {
       List<SessionQuestion> history = sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
 
-      GeneratedQuestion nextGq = llmService.generateNextQuestion(
-          session.getTrack().getId(), session.getTrack().getName(),
-          session.getTrack().getDescription(), userId, history);
+      agentResponse = interviewAgentService.processTurn(
+          userId, sessionId,
+          request.getTranscript(),
+          current.getQuestionText(),
+          current.getQuestion() != null ? current.getQuestion().getId() : null,
+          session.getTrack().getName(),
+          session.getTrack().getDescription(),
+          history,
+          answeredCount, maxQs,
+          (int) clientElapsed, targetSecs);
+    } catch (Exception e) {
+      log.error("Agent processing failed for session {}: {}", sessionId, e.getMessage());
+    }
 
-      QuestionBank sourceQ = resolveSourceQuestion(nextGq.sourceQuestionId());
+    if (agentResponse == null) {
+      agentResponse = com.careerpilot.backend.service.agent.AgentResponse.fallback(current.getQuestionText());
+    }
+
+    QuestionScoreResponse scoreResponse = null;
+    try {
+      int pacingScore = computePacingScore(speechRateWpm);
+      boolean alreadyScored = questionScoreRepository.existsBySessionQuestionId(current.getId());
+      if (!alreadyScored) {
+        QuestionScore score = QuestionScore.builder()
+            .sessionQuestion(current)
+            .contentRelevance(agentResponse.getContentRelevance())
+            .clarity(agentResponse.getClarity())
+            .confidence(agentResponse.getConfidence())
+            .fillerWords(agentResponse.getFillerWords())
+            .pacing(pacingScore)
+            .overallScore(0)
+            .coachingTip(agentResponse.getCoachingTip())
+            .build();
+        score.calculateOverallScore();
+        QuestionScore saved = questionScoreRepository.save(score);
+        try {
+          userSkillService.updateSkillsFromScore(current, saved.getOverallScore());
+        } catch (Exception e) {
+          log.error("Failed to update skills for question {}: {}", current.getId(), e.getMessage());
+        }
+        scoreResponse = toScoreResponse(saved);
+      } else {
+        scoreResponse = scoreService.getScore(current.getId());
+      }
+    } catch (Exception e) {
+      log.error("Score persistence failed for question ID {}: {}", current.getId(), e.getMessage());
+    }
+
+    boolean shouldEnd = timeUp || capReached || "READY_TO_COMPLETE".equals(agentResponse.getSessionStatus());
+
+    InterviewQuestionDto nextQuestion = null;
+    if (!shouldEnd && agentResponse.getNextQuestion() != null && !agentResponse.getNextQuestion().isBlank()) {
+      QuestionBank sourceQ = resolveSourceQuestion(agentResponse.getSourceQuestionId());
       SessionQuestion nextSq = SessionQuestion.builder()
           .session(session)
           .question(sourceQ)
-          .questionText(nextGq.text())
+          .questionText(agentResponse.getNextQuestion())
           .questionOrder(answeredCount + 1)
           .generatedByLlm(true)
           .build();
       SessionQuestion savedNext = sessionQuestionRepository.save(nextSq);
       nextQuestion = toQuestionResponse(savedNext);
-      log.info("Generated Q#{} for session {}", answeredCount + 1, sessionId);
+      log.info("Agent generated Q#{} for session {}", answeredCount + 1, sessionId);
     } else {
-      log.info("Session {} ready to complete (timeUp={}, capReached={}). " +
-          "Awaiting GET /feedback to close.", sessionId, timeUp, capReached);
+      log.info("Session {} ready to complete.", sessionId);
     }
 
     session.setUpdatedAt(LocalDateTime.now());
     sessionRepository.save(session);
 
-    String status = (timeUp || capReached) ? "READY_TO_COMPLETE" : SessionStatus.IN_PROGRESS.name();
+    String status = shouldEnd ? "READY_TO_COMPLETE" : SessionStatus.IN_PROGRESS.name();
 
     return SubmitAnswerResponse.builder()
         .sessionStatus(status)
@@ -304,6 +350,35 @@ public class InterviewSessionService implements IInterviewSessionService {
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
         .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
     return toSessionResponse(session);
+  }
+
+  // =====================================================================
+  // Pacing
+  // =====================================================================
+
+  private int computePacingScore(Double wpm) {
+    if (wpm == null || wpm <= 0) return 50;
+    int OPTIMAL_LOW = 110, OPTIMAL_HIGH = 160;
+    if (wpm >= OPTIMAL_LOW && wpm <= OPTIMAL_HIGH) return 100;
+    if (wpm < OPTIMAL_LOW) {
+      return (int) Math.max(0, 100.0 * (wpm - 30) / (OPTIMAL_LOW - 30));
+    }
+    return (int) Math.max(0, 100.0 * (250 - wpm) / (250 - OPTIMAL_HIGH));
+  }
+
+  private QuestionScoreResponse toScoreResponse(QuestionScore score) {
+    return QuestionScoreResponse.builder()
+        .id(score.getId())
+        .sessionQuestionId(score.getSessionQuestion().getId())
+        .contentRelevance(score.getContentRelevance())
+        .clarity(score.getClarity())
+        .confidence(score.getConfidence())
+        .pacing(score.getPacing())
+        .fillerWords(score.getFillerWords())
+        .overallScore(score.getOverallScore())
+        .coachingTip(score.getCoachingTip())
+        .createdAt(score.getCreatedAt())
+        .build();
   }
 
   // =====================================================================
