@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: ${TEAM_NAME:-team1}-career-pilot-api
     restart: unless-stopped
+    healthcheck:
+      disable: true
     networks:
       - iti
     ports:
@@ -12,7 +14,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.team1-backend.rule=PathPrefix(`/team1`)"
-      - "traefik.http.services.team1-backend.loadbalancer.server.port=8080"
+      - "traefik.docker.network=iti"
     environment:
       SERVER_SERVLET_CONTEXT_PATH: /team1
       DB_URL: ${DB_URL}
