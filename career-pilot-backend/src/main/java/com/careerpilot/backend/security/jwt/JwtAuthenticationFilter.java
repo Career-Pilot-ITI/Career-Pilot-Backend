@@ -54,12 +54,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             } catch (ExpiredJwtException e) {
                 logger.warn("Expired JWT token");
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token expirado");
-                return;
+                SecurityContextHolder.clearContext();
             } catch (Exception e) {
                 logger.error("Error processing the JWT token: {}", e.getMessage());
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired. Please login again.");
-                return;
+                SecurityContextHolder.clearContext();
             }
         }
         filterChain.doFilter(request, response);
