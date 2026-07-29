@@ -3,10 +3,18 @@ services:
     build:
       context: ./career-pilot-backend
       dockerfile: Dockerfile
-    container_name: career-pilot-api
+    container_name: ${TEAM_NAME:-team1}-career-pilot-api
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - iti
+    ports:
+      - "${HOST_PORT:-8081}:8080" 
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.team1-backend.rule=PathPrefix(`/team1`)"
+      - "traefik.http.services.team1-backend.loadbalancer.server.port=8080"
     environment:
+      SERVER_SERVLET_CONTEXT_PATH: /team1
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -20,7 +28,7 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       URI_APP: ${URI_APP:-http://localhost:5173}
-      REDIRECT_URI_BASE: ${REDIRECT_URI_BASE:-http://localhost:8080}
+      REDIRECT_URI_BASE: ${REDIRECT_URI_BASE:-http://35.95.57.158/team1}
       OTP_PROVIDER: ${OTP_PROVIDER:-simulated}
       WIREWEB_API_KEY: ${WIREWEB_API_KEY:-}
       WIREWEB_SESSION_ID: ${WIREWEB_SESSION_ID:-}
@@ -42,3 +50,8 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+networks:
+  iti:
+    external: true
+
