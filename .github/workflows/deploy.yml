@@ -30,14 +30,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
+            sg docker -c "
             cd /home/student/team1/app
-            
-            # Write out the env variables
-            echo "${{ secrets.ENV_FILE }}" > .env
-            
-            # Restart the containers (using rootless environment variables if applicable)
-            export PATH=/home/student/bin:$PATH
-            export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock
-            
+            echo '${{ secrets.ENV_FILE }}' > .env
             docker compose down --remove-orphans
             docker compose up -d --build
+            "
