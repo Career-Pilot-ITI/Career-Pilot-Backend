@@ -3,7 +3,6 @@ package com.careerpilot.backend.service.impl;
 import com.careerpilot.backend.controller.advice.WalletException;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
-import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.InterviewQuestionDto;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
@@ -31,13 +30,13 @@ import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.repository.IUserRepository;
 import com.careerpilot.backend.service.ICoinWalletService;
 import com.careerpilot.backend.service.IInterviewSessionService;
-import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.service.IQuestionScoreService;
 import com.careerpilot.backend.service.IUserSkillService;
 import com.careerpilot.backend.service.agent.InterviewAgentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -59,12 +58,14 @@ public class InterviewSessionService implements IInterviewSessionService {
   private final IUserRepository userRepository;
   private final IQuestionBankRepository questionBankRepository;
   private final IQuestionScoreRepository questionScoreRepository;
-  private final ILlmService llmService;
   private final IQuestionScoreService scoreService;
   private final ICoinWalletService coinWalletService;
   private final IUserSkillService userSkillService;
   private final InterviewAgentService interviewAgentService;
   private final ObjectMapper objectMapper;
+
+  @Value("${app.session.minutes-per-coin:2}")
+  private int minutesPerCoin;
 
   // =====================================================================
   // START
@@ -74,15 +75,16 @@ public class InterviewSessionService implements IInterviewSessionService {
   @Transactional
   public StartSessionResponse startSession(StartSessionRequest request, Long userId) {
     log.info("Starting session for user: {}, track: {}", userId, request.getTrackId());
-    checkSessionQuota(userId);
+
+    int targetMinutes = request.getDurationMinutes() != null ? request.getDurationMinutes() : 15;
+    int sessionCost = Math.max(1, targetMinutes / minutesPerCoin);
+    checkSessionQuota(userId, sessionCost);
 
     Track track = trackRepository.findById(request.getTrackId())
         .orElseThrow(() -> new RuntimeException("Track not found: " + request.getTrackId()));
 
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new RuntimeException("User not found: " + userId));
-
-    int targetMinutes = request.getDurationMinutes() != null ? request.getDurationMinutes() : 15;
     int maxQuestions = request.getQuestionCount() != null ? request.getQuestionCount() : 10;
 
     InterviewSession session = InterviewSession.builder()
@@ -96,10 +98,12 @@ public class InterviewSessionService implements IInterviewSessionService {
     session = sessionRepository.save(session);
     log.info("Created session ID: {} for user: {}", session.getId(), userId);
 
-    GeneratedQuestion firstQuestion = llmService.generateNextQuestion(
-        track.getId(), track.getName(), track.getDescription(), userId, List.of());
-    if (firstQuestion == null) {
-      throw new RuntimeException("LLM failed to generate first question for track: " + track.getName());
+    com.careerpilot.backend.dto.response.GeneratedQuestion firstQuestion = interviewAgentService.generateFirstQuestion(
+        userId, track.getName(), track.getDescription());
+    if (firstQuestion == null || firstQuestion.text() == null) {
+      log.warn("Agent failed to generate first question, using fallback for track: {}", track.getName());
+      firstQuestion = new com.careerpilot.backend.dto.response.GeneratedQuestion(
+          "Can you describe your experience with " + track.getName() + "?", null);
     }
 
     QuestionBank sourceQ = resolveSourceQuestion(firstQuestion.sourceQuestionId());
@@ -401,7 +405,7 @@ public class InterviewSessionService implements IInterviewSessionService {
         .build();
   }
 
-  private void checkSessionQuota(Long userId) {
+  private void checkSessionQuota(Long userId, int sessionCost) {
     Subscription sub = subscriptionRepository.findByUserId(userId)
             .orElseGet(() -> {
               log.warn("No subscription found for user {} during quota check — treating as FREE tier", userId);
@@ -427,7 +431,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     if (monthlyCount >= 1) {
       try {
-        coinWalletService.debit(userId, 50, CoinLedgerReason.SESSION_SPEND, null);
+        coinWalletService.debit(userId, sessionCost, CoinLedgerReason.SESSION_SPEND, null);
       } catch (WalletException.InsufficientBalanceException e) {
         throw new SessionQuotaException.QuotaExceededException(
                 "You have 0 sessions remaining. Subscribe or buy coins.");
