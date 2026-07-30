@@ -37,6 +37,84 @@ public class InterviewAgentService {
 
     @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
     @RedactPii
+    public com.careerpilot.backend.dto.response.GeneratedQuestion generateFirstQuestion(
+            Long userId, String trackName, String trackDescription
+    ) {
+        String cvContext = buildCvContext(userId);
+        String questionBankContext = buildQuestionBankContext(trackName);
+
+        String prompt = """
+                Track: %s
+                Track Objective: %s
+                
+                Candidate CV:
+                %s
+                
+                Question Bank Reference:
+                %s
+                
+                This is the VERY FIRST question of the interview. Generate a question that is:
+                
+                CRITICAL — VARY THE OPENING STYLE. Pick ONE of these randomly:
+                1. Technical deep-dive: ask them to solve a specific problem or design something
+                2. Experience-based: ask about a specific challenge related to their CV
+                3. Scenario-based: present a realistic work scenario and ask how they'd handle it
+                4. Opinion-based: ask their opinion on a current trend or technology choice
+                5. Behavioral: ask about a past situation that demonstrates a key skill
+                
+                Do NOT start with "walk me through your experience" or "tell me about yourself".
+                Do NOT ask a generic introductory question.
+                Anchor the question to their CV and track objective.
+                Make it concrete, specific, and immediately engaging.
+                
+                Use the tools available to you:
+                - searchQuestionBank: find questions from the bank for inspiration
+                - searchWeb: find current/trending interview questions
+                
+                Return ONLY raw JSON: {"text": "your question here", "sourceQuestionId": null}
+                """.formatted(trackName,
+                trackDescription != null ? trackDescription : "Assess the candidate's skills",
+                cvContext, questionBankContext);
+
+        log.info("Agent generating first question for track: {}", trackName);
+
+        String response = chatClient.prompt()
+                .system("You are Career Pilot AI — an expert interviewer. Generate a dynamic, varied first question. Do NOT use generic openers.")
+                .user(prompt)
+                .tools(interviewTools)
+                .call()
+                .content();
+
+        try {
+            String cleaned = response.replaceAll("```(?:json)?\\s*", "").trim();
+            JsonNode root = objectMapper.readTree(cleaned);
+            String text = getString(root, "text");
+            Long sourceId = root.has("sourceQuestionId") && !root.get("sourceQuestionId").isNull()
+                    ? root.get("sourceQuestionId").asLong() : null;
+            if (text == null || text.isBlank()) {
+                return fallbackFirstQuestion(trackName);
+            }
+            return new com.careerpilot.backend.dto.response.GeneratedQuestion(text, sourceId);
+        } catch (Exception e) {
+            log.warn("Failed to parse first question response: {}", response, e);
+            return fallbackFirstQuestion(trackName);
+        }
+    }
+
+    private com.careerpilot.backend.dto.response.GeneratedQuestion fallbackFirstQuestion(String trackName) {
+        String[] fallbacks = {
+            "Can you describe a complex %s problem you solved and how you approached it?",
+            "What's your approach to designing a %s system from scratch?",
+            "Tell me about a time you had to make a technical trade-off in %s.",
+            "How do you stay current with %s trends and incorporate them into your work?",
+            "Describe a %s project where you had to balance quality with delivery speed."
+        };
+        String q = fallbacks[(int) (Math.random() * fallbacks.length)].formatted(trackName);
+        return new com.careerpilot.backend.dto.response.GeneratedQuestion(q, null);
+    }
+
+    @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
+    @RedactPii
     public AgentResponse processTurn(
             Long userId, Long sessionId,
             String transcript, String currentQuestionText, Long currentQuestionBankId,
