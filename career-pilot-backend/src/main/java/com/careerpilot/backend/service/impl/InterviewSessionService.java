@@ -75,15 +75,16 @@ public class InterviewSessionService implements IInterviewSessionService {
   @Transactional
   public StartSessionResponse startSession(StartSessionRequest request, Long userId) {
     log.info("Starting session for user: {}, track: {}", userId, request.getTrackId());
-    checkSessionQuota(userId);
+
+    int targetMinutes = request.getDurationMinutes() != null ? request.getDurationMinutes() : 15;
+    int sessionCost = Math.max(1, targetMinutes / minutesPerCoin);
+    checkSessionQuota(userId, sessionCost);
 
     Track track = trackRepository.findById(request.getTrackId())
         .orElseThrow(() -> new RuntimeException("Track not found: " + request.getTrackId()));
 
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new RuntimeException("User not found: " + userId));
-
-    int targetMinutes = request.getDurationMinutes() != null ? request.getDurationMinutes() : 15;
     int maxQuestions = request.getQuestionCount() != null ? request.getQuestionCount() : 10;
 
     InterviewSession session = InterviewSession.builder()
@@ -404,7 +405,7 @@ public class InterviewSessionService implements IInterviewSessionService {
         .build();
   }
 
-  private void checkSessionQuota(Long userId) {
+  private void checkSessionQuota(Long userId, int sessionCost) {
     Subscription sub = subscriptionRepository.findByUserId(userId)
             .orElseGet(() -> {
               log.warn("No subscription found for user {} during quota check — treating as FREE tier", userId);
@@ -430,7 +431,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     if (monthlyCount >= 1) {
       try {
-        coinWalletService.debit(userId, 50, CoinLedgerReason.SESSION_SPEND, null);
+        coinWalletService.debit(userId, sessionCost, CoinLedgerReason.SESSION_SPEND, null);
       } catch (WalletException.InsufficientBalanceException e) {
         throw new SessionQuotaException.QuotaExceededException(
                 "You have 0 sessions remaining. Subscribe or buy coins.");
