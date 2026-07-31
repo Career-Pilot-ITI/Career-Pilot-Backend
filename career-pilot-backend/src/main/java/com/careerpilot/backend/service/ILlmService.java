@@ -3,6 +3,7 @@ package com.careerpilot.backend.service;
 import com.careerpilot.backend.annotation.RateLimit;
 import com.careerpilot.backend.annotation.RedactPii;
 import com.careerpilot.backend.dto.response.CvAnalysis;
+import com.careerpilot.backend.dto.response.JobDraft;
 import com.careerpilot.backend.dto.response.ScoreResponse;
 
 import java.util.List;
@@ -24,4 +25,8 @@ public interface ILlmService {
   @RateLimit(capacity = 2, refillTokens = 2)
   @RedactPii
   CvAnalysis analyzeCv(String cvText);
+
+  @RateLimit
+  @RedactPii
+  JobDraft parseJobPosting(String rawText);
 }
