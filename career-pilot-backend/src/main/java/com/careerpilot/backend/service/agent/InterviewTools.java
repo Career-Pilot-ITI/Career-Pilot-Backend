@@ -1,7 +1,9 @@
 package com.careerpilot.backend.service.agent;
 
 import com.careerpilot.backend.dto.response.ScoreResponse;
+import com.careerpilot.backend.entity.JobListing;
 import com.careerpilot.backend.entity.QuestionBank;
+import com.careerpilot.backend.repository.IJobListingRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ public class InterviewTools {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final IQuestionBankRepository questionBankRepository;
+    private final IJobListingRepository jobListingRepository;
     private final WebSearchService webSearchService;
 
     @Tool(description = "Evaluate a candidate's interview answer and return scores as a JSON string. " +
@@ -118,5 +121,35 @@ public class InterviewTools {
             return "complete";
         }
         return "continue";
+    }
+
+    @Tool(description = "Retrieve the full job posting (description, responsibilities, qualifications) for a saved job " +
+            "by its job ID. Use this to probe a specific requirement of the role being interviewed for. " +
+            "Returns a formatted job posting or an error if the job id is unknown.")
+    public String getJobPosting(Long jobId) {
+        Optional<JobListing> opt = jobListingRepository.findById(jobId);
+        if (opt.isEmpty()) {
+            return "No job posting found for id: " + jobId;
+        }
+        JobListing j = opt.get();
+        StringBuilder sb = new StringBuilder();
+        sb.append("Job Title: ").append(j.getTitle()).append("\n");
+        if (j.getCompanyName() != null) sb.append("Company: ").append(j.getCompanyName()).append("\n");
+        if (j.getLocation() != null) sb.append("Location: ").append(j.getLocation()).append("\n");
+        if (j.getEmploymentType() != null) sb.append("Employment Type: ").append(j.getEmploymentType()).append("\n");
+        if (j.getSeniorityLevel() != null) sb.append("Seniority: ").append(j.getSeniorityLevel()).append("\n");
+        if (j.getRequiredSkills() != null && !j.getRequiredSkills().isEmpty())
+            sb.append("Required Skills: ").append(String.join(", ", j.getRequiredSkills())).append("\n");
+        if (j.getPreferredSkills() != null && !j.getPreferredSkills().isEmpty())
+            sb.append("Preferred Skills: ").append(String.join(", ", j.getPreferredSkills())).append("\n");
+        if (j.getTechnologies() != null && !j.getTechnologies().isEmpty())
+            sb.append("Technologies: ").append(String.join(", ", j.getTechnologies())).append("\n");
+        if (j.getDescription() != null && !j.getDescription().isBlank())
+            sb.append("\nDescription:\n").append(j.getDescription()).append("\n");
+        if (j.getResponsibilities() != null && !j.getResponsibilities().isBlank())
+            sb.append("\nResponsibilities:\n").append(j.getResponsibilities()).append("\n");
+        if (j.getQualifications() != null && !j.getQualifications().isBlank())
+            sb.append("\nQualifications:\n").append(j.getQualifications()).append("\n");
+        return sb.toString();
     }
 }

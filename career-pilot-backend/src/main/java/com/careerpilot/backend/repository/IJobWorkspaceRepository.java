@@ -10,5 +10,6 @@ public interface IJobWorkspaceRepository extends JpaRepository<JobWorkspace, Lon
     List<JobWorkspace> findByUserIdOrderByCreatedAtDesc(Long userId);
     Optional<JobWorkspace> findByIdAndUserId(Long id, Long userId);
     Optional<JobWorkspace> findByUserIdAndJobId(Long userId, Long jobId);
+    Optional<JobWorkspace> findByLastInterviewSessionId(Long sessionId);
     boolean existsByUserIdAndJobId(Long userId, Long jobId);
 }

@@ -29,4 +29,6 @@ public class StartSessionRequest {
     @Max(value = 120, message = "durationMinutes must not exceed 120")
     @Builder.Default
     private Integer durationMinutes = 15;
+
+    private Long workspaceId;
 }
