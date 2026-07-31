@@ -22,9 +22,9 @@ public class LinkedInJobScraperService implements ILinkedInJobScraperService {
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   @Value("${app.chocodata.api-key:}")
-  private final String apiKey;
+  private String apiKey;
   @Value("${app.chocodata.base-url:https://api.chocodata.com/api/v1/linkedin/job}")
-  private final String baseUrl;
+  private String baseUrl;
 
   @Override
   public ChocoDataJobResponse scrape(String jobIdOrUrl) throws JobScrapeException {
