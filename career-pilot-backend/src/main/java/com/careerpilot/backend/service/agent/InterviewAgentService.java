@@ -2,6 +2,7 @@ package com.careerpilot.backend.service.agent;
 
 import com.careerpilot.backend.annotation.RateLimit;
 import com.careerpilot.backend.annotation.RedactPii;
+import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.FeedbackReport;
 import com.careerpilot.backend.entity.QuestionBank;
@@ -10,7 +11,6 @@ import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.repository.IFeedbackReportRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.IRagContextDocumentRepository;
-import com.careerpilot.backend.repository.ISessionQuestionRepository;
 import com.careerpilot.backend.utils.PiiRedactionUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +20,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -32,12 +32,11 @@ public class InterviewAgentService {
     private final IQuestionBankRepository questionBankRepository;
     private final IFeedbackReportRepository feedbackReportRepository;
     private final IRagContextDocumentRepository ragContextDocumentRepository;
-    private final ISessionQuestionRepository sessionQuestionRepository;
     private final InterviewTools interviewTools;
 
-    @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
+    @RateLimit
     @RedactPii
-    public com.careerpilot.backend.dto.response.GeneratedQuestion generateFirstQuestion(
+    public GeneratedQuestion generateFirstQuestion(
             Long userId, String trackName, String trackDescription
     ) {
         String cvContext = buildCvContext(userId);
@@ -86,6 +85,7 @@ public class InterviewAgentService {
                 .content();
 
         try {
+            assert response != null;
             String cleaned = response.replaceAll("```(?:json)?\\s*", "").trim();
             JsonNode root = objectMapper.readTree(cleaned);
             String text = getString(root, "text");
@@ -113,7 +113,7 @@ public class InterviewAgentService {
         return new com.careerpilot.backend.dto.response.GeneratedQuestion(q, null);
     }
 
-    @RateLimit(capacity = 5, refillTokens = 5, refillSeconds = 60)
+    @RateLimit
     @RedactPii
     public AgentResponse processTurn(
             Long userId, Long sessionId,
@@ -195,10 +195,10 @@ public class InterviewAgentService {
                 .call()
                 .content();
 
-        return parseAgentResponse(response, currentQuestionText, transcript);
+        return parseAgentResponse(response, currentQuestionText);
     }
 
-    private AgentResponse parseAgentResponse(String response, String questionText, String transcript) {
+    private AgentResponse parseAgentResponse(String response, String questionText) {
         if (response == null || response.isBlank()) {
             return AgentResponse.fallback(questionText);
         }
@@ -271,8 +271,8 @@ public class InterviewAgentService {
                 .mapToInt(FeedbackReport::getOverallScore)
                 .average().orElse(0);
         List<String> tips = reports.stream()
-                .filter(r -> r.getCoachingTips() != null)
                 .map(FeedbackReport::getCoachingTips)
+                .filter(Objects::nonNull)
                 .toList();
         StringBuilder sb = new StringBuilder();
         sb.append("Past sessions: ").append(reports.size()).append("\n");
@@ -289,7 +289,7 @@ public class InterviewAgentService {
                 .filter(q -> q.getTrack() != null && trackName != null
                         && q.getTrack().getName().toLowerCase().contains(trackName.toLowerCase()))
                 .limit(10)
-                .collect(Collectors.toList());
+                .toList();
         if (questions.isEmpty()) return "No question bank entries for this track.";
         StringBuilder sb = new StringBuilder("Available sample questions:\n");
         for (QuestionBank q : questions) {
