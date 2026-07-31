@@ -142,6 +142,9 @@ app:
     api-key: ${WIREWEB_API_KEY:}
     session-id: ${WIREWEB_SESSION_ID:}
     base-url: ${WIREWEB_BASE_URL:https://app.wireweb.co.in}
+  chocodata:
+    api-key: ${CHOCODATA_API_KEY:}
+    base-url: ${CHOCODATA_BASE_URL:https://api.chocodata.com/api/v1/linkedin/job}
    
 management:
   health:
