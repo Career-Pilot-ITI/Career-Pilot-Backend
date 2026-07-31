@@ -11,12 +11,15 @@ import com.careerpilot.backend.dto.response.StartSessionResponse;
 import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
 import com.careerpilot.backend.entity.InterviewSession;
+import com.careerpilot.backend.entity.JobListing;
+import com.careerpilot.backend.entity.JobWorkspace;
 import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.SessionQuestion;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IInterviewSessionRepository;
+import com.careerpilot.backend.repository.IJobWorkspaceRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
@@ -47,6 +50,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
   private final IInterviewSessionRepository sessionRepository;
   private final ISessionQuestionRepository sessionQuestionRepository;
+  private final IJobWorkspaceRepository jobWorkspaceRepository;
   private final ITrackRepository trackRepository;
   private final IUserRepository userRepository;
   private final IQuestionBankRepository questionBankRepository;
@@ -73,8 +77,10 @@ public class InterviewSessionService implements IInterviewSessionService {
     int sessionCost = Math.max(1, targetMinutes / minutesPerCoin);
     sessionQuotaService.checkSessionQuota(userId, sessionCost);
 
-    Track track = trackRepository.findById(request.getTrackId())
-        .orElseThrow(() -> new RuntimeException("Track not found: " + request.getTrackId()));
+    Track track = resolveTrack(request, userId);
+    if (track == null) {
+      throw new RuntimeException("Track not found: " + request.getTrackId());
+    }
 
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new RuntimeException("User not found: " + userId));
@@ -92,12 +98,14 @@ public class InterviewSessionService implements IInterviewSessionService {
     log.info("Created session ID: {} for user: {}", session.getId(), userId);
 
     com.careerpilot.backend.dto.response.GeneratedQuestion firstQuestion = interviewAgentService.generateFirstQuestion(
-        userId, track.getName(), track.getDescription());
+        userId, track.getName(), track.getDescription(), resolveWorkspaceJob(request.getWorkspaceId(), userId));
     if (firstQuestion == null || firstQuestion.text() == null) {
       log.warn("Agent failed to generate first question, using fallback for track: {}", track.getName());
       firstQuestion = new com.careerpilot.backend.dto.response.GeneratedQuestion(
           "Can you describe your experience with " + track.getName() + "?", null);
     }
+
+    bindWorkspaceToSession(request.getWorkspaceId(), userId, session);
 
     QuestionBank sourceQ = resolveSourceQuestion(firstQuestion.sourceQuestionId());
     SessionQuestion sq = SessionQuestion.builder()
@@ -214,6 +222,7 @@ public class InterviewSessionService implements IInterviewSessionService {
           current.getQuestion() != null ? current.getQuestion().getId() : null,
           session.getTrack().getName(),
           session.getTrack().getDescription(),
+          findWorkspaceJob(sessionId),
           history,
           answeredCount, maxQs,
           (int) clientElapsed, targetSecs);
@@ -433,5 +442,52 @@ public class InterviewSessionService implements IInterviewSessionService {
         .completedAt(s.getCompletedAt())
         .createdAt(s.getCreatedAt())
         .build();
+  }
+
+  private JobListing resolveWorkspaceJob(Long workspaceId, Long userId) {
+    if (workspaceId == null) return null;
+    JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
+        .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
+    return workspace.getJob();
+  }
+
+
+  private Track resolveTrack(StartSessionRequest request, Long userId) {
+    JobListing job = resolveWorkspaceJob(request.getWorkspaceId(), userId);
+    if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
+      Track matched = matchTrackByTitle(job.getTitle());
+      if (matched != null) {
+        log.info("Auto-matched job '{}' to track '{}'", job.getTitle(), matched.getName());
+        return matched;
+      }
+    }
+    if (request.getTrackId() != null) {
+      return trackRepository.findById(request.getTrackId()).orElse(null);
+    }
+    return null;
+  }
+
+  private Track matchTrackByTitle(String jobTitle) {
+    String title = jobTitle.toLowerCase();
+    return trackRepository.findByIsActiveTrue().stream()
+        .filter(t -> t.getName() != null)
+        .filter(t -> title.contains(t.getName().toLowerCase())
+            || t.getName().toLowerCase().contains(title))
+        .findFirst()
+        .orElse(null);
+  }
+
+  private void bindWorkspaceToSession(Long workspaceId, Long userId, InterviewSession session) {
+    if (workspaceId == null) return;
+    JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
+        .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
+    workspace.setLastInterviewSession(session);
+    jobWorkspaceRepository.save(workspace);
+  }
+
+  private JobListing findWorkspaceJob(Long sessionId) {
+    return jobWorkspaceRepository.findByLastInterviewSessionId(sessionId)
+        .map(JobWorkspace::getJob)
+        .orElse(null);
   }
 }

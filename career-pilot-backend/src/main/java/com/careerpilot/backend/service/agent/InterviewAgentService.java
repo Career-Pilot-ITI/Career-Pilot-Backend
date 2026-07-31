@@ -5,6 +5,7 @@ import com.careerpilot.backend.annotation.RedactPii;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.FeedbackReport;
+import com.careerpilot.backend.entity.JobListing;
 import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.RagContextDocument;
 import com.careerpilot.backend.entity.SessionQuestion;
@@ -37,16 +38,19 @@ public class InterviewAgentService {
     @RateLimit
     @RedactPii
     public GeneratedQuestion generateFirstQuestion(
-            Long userId, String trackName, String trackDescription
+            Long userId, String trackName, String trackDescription, JobListing job
     ) {
         String cvContext = buildCvContext(userId);
         String questionBankContext = buildQuestionBankContext(trackName);
+        String jobContext = buildJobContext(job);
 
         String prompt = """
                 Track: %s
                 Track Objective: %s
                 
                 Candidate CV:
+                %s
+                
                 %s
                 
                 Question Bank Reference:
@@ -69,11 +73,12 @@ public class InterviewAgentService {
                 Use the tools available to you:
                 - searchQuestionBank: find questions from the bank for inspiration
                 - searchWeb: find current/trending interview questions
+                - getJobPosting: fetch the full job description when you need the exact requirements
                 
                 Return ONLY raw JSON: {"text": "your question here", "sourceQuestionId": null}
                 """.formatted(trackName,
                 trackDescription != null ? trackDescription : "Assess the candidate's skills",
-                cvContext, questionBankContext);
+                cvContext, jobContext, questionBankContext);
 
         log.info("Agent generating first question for track: {}", trackName);
 
@@ -119,6 +124,7 @@ public class InterviewAgentService {
             Long userId, Long sessionId,
             String transcript, String currentQuestionText, Long currentQuestionBankId,
             String trackName, String trackDescription,
+            JobListing job,
             List<SessionQuestion> history,
             int questionsAsked, int maxQuestions,
             int elapsedSeconds, int targetDurationSeconds
@@ -128,6 +134,7 @@ public class InterviewAgentService {
         String questionBankContext = buildQuestionBankContext(trackName);
         String historyText = buildHistoryText(history);
         String idealAnswerKeywords = buildIdealAnswerKeywords(currentQuestionBankId);
+        String jobContext = buildJobContext(job);
 
         String systemPrompt = """
                 You are Career Pilot AI — an expert interview conductor. Your job is to:
@@ -139,6 +146,7 @@ public class InterviewAgentService {
                 - evaluateAnswer: score the candidate's answer (always call this first)
                 - searchQuestionBank: find relevant questions from the question bank
                 - searchWeb: find current/trending interview questions on any topic
+                - getJobPosting: fetch the full job posting to probe a specific requirement
                 - checkCompletion: check if the session should end
                 
                 ALWAYS call evaluateAnswer first to score the response.
@@ -163,6 +171,8 @@ public class InterviewAgentService {
                 Past Performance:
                 %s
                 
+                %s
+                
                 Question Bank Reference:
                 %s
                 
@@ -179,7 +189,7 @@ public class InterviewAgentService {
                 Evaluate, decide, and respond.
                 """.formatted(trackName,
                 trackDescription != null ? trackDescription : "Assess the candidate's skills",
-                cvContext, pastPerformance, questionBankContext,
+                cvContext, pastPerformance, jobContext, questionBankContext,
                 currentQuestionText,
                 idealAnswerKeywords != null ? idealAnswerKeywords : "General best practices",
                 historyText,
@@ -254,6 +264,25 @@ public class InterviewAgentService {
             return node.get(field).asText("");
         }
         return "";
+    }
+
+    private String buildJobContext(JobListing job) {
+        if (job == null) return "";
+        StringBuilder sb = new StringBuilder("Job Posting:\n");
+        sb.append("- Job ID: ").append(job.getId()).append("\n");
+        if (job.getTitle() != null) sb.append("- Title: ").append(job.getTitle()).append("\n");
+        if (job.getCompanyName() != null) sb.append("- Company: ").append(job.getCompanyName()).append("\n");
+        if (job.getLocation() != null) sb.append("- Location: ").append(job.getLocation()).append("\n");
+        if (job.getEmploymentType() != null) sb.append("- Employment Type: ").append(job.getEmploymentType()).append("\n");
+        if (job.getSeniorityLevel() != null) sb.append("- Seniority: ").append(job.getSeniorityLevel()).append("\n");
+        if (job.getRequiredSkills() != null && !job.getRequiredSkills().isEmpty())
+            sb.append("- Required Skills: ").append(String.join(", ", job.getRequiredSkills())).append("\n");
+        if (job.getPreferredSkills() != null && !job.getPreferredSkills().isEmpty())
+            sb.append("- Preferred Skills: ").append(String.join(", ", job.getPreferredSkills())).append("\n");
+        if (job.getTechnologies() != null && !job.getTechnologies().isEmpty())
+            sb.append("- Technologies: ").append(String.join(", ", job.getTechnologies())).append("\n");
+        sb.append("(Use the getJobPosting tool with the job ID for the full description, responsibilities, and qualifications.)");
+        return sb.toString();
     }
 
     private String buildCvContext(Long userId) {
