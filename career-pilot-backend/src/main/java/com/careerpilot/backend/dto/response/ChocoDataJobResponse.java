@@ -5,10 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.OffsetDateTime;
 
-/**
- * Parsed LinkedIn job posting returned by the ChocoData API
- * (GET /api/v1/linkedin/job). Unknown fields in the response are ignored.
- */
+
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ChocoDataJobResponse(
         @JsonProperty("job_id") String jobId,
