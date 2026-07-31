@@ -131,6 +131,8 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   session:
     minutes-per-coin: ${MINUTES_PER_COIN:2}
+  job-parse:
+    coin-cost: ${JOB_PARSE_COIN_COST:1}
   upload:
     path: ${UPLOAD_PATH:./uploads}
   redirect:
