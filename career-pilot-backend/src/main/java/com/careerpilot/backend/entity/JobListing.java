@@ -1,5 +1,7 @@
 package com.careerpilot.backend.entity;
 
+import com.careerpilot.backend.dto.response.ChocoDataJobResponse;
+import com.careerpilot.backend.dto.response.JobDraft;
 import com.careerpilot.backend.entity.ENUMs.JobSourceType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -110,5 +112,66 @@ public class JobListing {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Build a transient JobListing from an LLM-parsed draft. The owner, source
+     * type, and source URL are set by the caller (they are not part of the
+     * LLM contract).
+     */
+    public static JobListing fromDraft(JobDraft d, User user, JobSourceType sourceType, String sourceUrl) {
+        return JobListing.builder()
+                .user(user)
+                .title(d.title())
+                .companyName(d.companyName())
+                .location(d.location())
+                .description(d.description())
+                .employmentType(d.employmentType())
+                .seniorityLevel(d.seniorityLevel())
+                .requiredSkills(d.requiredSkills())
+                .preferredSkills(d.preferredSkills())
+                .technologies(d.technologies())
+                .salaryMin(d.salaryMin())
+                .salaryMax(d.salaryMax())
+                .currency(d.currency())
+                .experienceYears(d.experienceYears())
+                .educationLevel(d.educationLevel())
+                .sourceUrl(sourceUrl)
+                .sourceType(sourceType)
+                .build();
+    }
+
+    /**
+     * Build a transient JobListing directly from a ChocoData response (no LLM
+     * round-trip — ChocoData already returns structured fields). The owner and
+     * source type are set by the caller.
+     */
+    public static JobListing fromChocoData(ChocoDataJobResponse r, User user, String sourceUrl) {
+        return JobListing.builder()
+                .user(user)
+                .title(r.title())
+                .companyName(r.company())
+                .location(r.location())
+                .description(r.description())
+                .employmentType(normalizeEmploymentType(r.employmentType()))
+                .seniorityLevel(r.seniorityLevel())
+                .requiredSkills(new ArrayList<>())
+                .preferredSkills(new ArrayList<>())
+                .technologies(new ArrayList<>())
+                .sourceUrl(sourceUrl)
+                .sourceType(JobSourceType.URL)
+                .build();
+    }
+
+    private static String normalizeEmploymentType(String raw) {
+        if (raw == null) return null;
+        String upper = raw.toUpperCase().replace(" ", "_");
+        return switch (upper) {
+            case "FULL_TIME", "FULLTIME" -> "FULL_TIME";
+            case "PART_TIME", "PARTTIME" -> "PART_TIME";
+            case "CONTRACT", "CONTRACTOR" -> "CONTRACT";
+            case "INTERNSHIP", "INTERN" -> "INTERNSHIP";
+            default -> raw;
+        };
     }
 }

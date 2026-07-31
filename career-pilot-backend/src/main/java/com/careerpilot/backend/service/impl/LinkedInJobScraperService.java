@@ -2,7 +2,10 @@ package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.JobScrapeException;
 import com.careerpilot.backend.dto.response.ChocoDataJobResponse;
+import com.careerpilot.backend.service.ILinkedInJobScraperService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -12,25 +15,19 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
+@RequiredArgsConstructor
 @Slf4j
-public class LinkedInJobScraperService {
+public class LinkedInJobScraperService implements ILinkedInJobScraperService {
 
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
+  @Value("${app.chocodata.api-key:}")
   private final String apiKey;
+  @Value("${app.chocodata.base-url:https://api.chocodata.com/api/v1/linkedin/job}")
   private final String baseUrl;
 
-  public LinkedInJobScraperService(RestTemplate restTemplate,
-      ObjectMapper objectMapper,
-      @Value("${app.chocodata.api-key:}") String apiKey,
-      @Value("${app.chocodata.base-url:https://api.chocodata.com/api/v1/linkedin/job}") String baseUrl) {
-    this.restTemplate = restTemplate;
-    this.objectMapper = objectMapper;
-    this.apiKey = apiKey;
-    this.baseUrl = baseUrl;
-  }
-
-  public ChocoDataJobResponse scrape(String jobIdOrUrl) {
+  @Override
+  public ChocoDataJobResponse scrape(String jobIdOrUrl) throws JobScrapeException {
     if (apiKey == null || apiKey.isBlank()) {
       throw new JobScrapeException.NotConfiguredException(
           "CHOCODATA_API_KEY is not set. Add it to enable LinkedIn job import.");

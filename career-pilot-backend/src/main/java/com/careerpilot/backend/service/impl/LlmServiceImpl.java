@@ -4,6 +4,7 @@ import com.careerpilot.backend.service.ILlmService;
 
 import com.careerpilot.backend.dto.response.CvAnalysis;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
+import com.careerpilot.backend.dto.response.JobDraft;
 import com.careerpilot.backend.dto.response.ScoreResponse;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.FeedbackReport;
@@ -43,83 +44,6 @@ public class LlmServiceImpl implements ILlmService {
   private final ISessionQuestionRepository sessionQuestionRepository;
   private final IQuestionScoreRepository questionScoreRepository;
 
-  @Override
-  public GeneratedQuestion generateNextQuestion(Long trackId, String trackName, String trackDescription, Long userId, List<SessionQuestion> previousQuestions) {
-    List<QuestionBank> baseQuestions = questionBankRepository.findByTrackIdAndIsActiveTrue(trackId);
-    if (baseQuestions.isEmpty()) {
-      baseQuestions = questionBankRepository.findByTrackId(trackId);
-    }
-    String samples = baseQuestions.stream()
-        .map(q -> "- ID " + q.getId() + ": " + q.getQuestionText()
-            + "  [keywords: " + q.getExpectedKeywords() + "]")
-        .collect(Collectors.joining("\n"));
-
-    StringBuilder historySb = new StringBuilder();
-    if (previousQuestions == null || previousQuestions.isEmpty()) {
-      historySb.append("No questions asked yet. This is the beginning of the interview. You must generate the first, opening question.\n");
-    } else {
-      historySb.append("Here is the conversation history of the interview so far:\n");
-      for (SessionQuestion sq : previousQuestions) {
-        historySb.append("Interviewer: ").append(sq.getQuestionText()).append("\n");
-        historySb.append("Candidate: ").append(sq.getUserTranscript() != null ? sq.getUserTranscript() : "[No response/skipped]").append("\n");
-        historySb.append("\n");
-      }
-    }
-
-    String cvText = buildCvContext(userId);
-    String desc = (trackDescription != null && !trackDescription.isBlank()) ? trackDescription : "Assess the candidate's skills for this role.";
-    String cvContext = (cvText != null && !cvText.isBlank()) ? cvText : "No CV provided.";
-
-    String prompt = """
-        You are conducting a dynamic, interactive, and open-ended interview for the track: "%s".
-        
-        Track Objective: %s
-        
-        Candidate CV Context:
-        %s
-        
-        Sample Reference Questions for this Track (use these for concepts/keywords targets and difficulty calibration):
-        %s
-        
-        %s
-        
-        Based on the track objective, the CV, and the history, generate the NEXT question.
-        
-        Guidelines:
-        1. If this is the start (no history), generate a friendly but professional open-ended introductory/technical question tailored to their track and CV.
-        2. If there is history:
-           - Evaluate the candidate's last response.
-           - If they left room for clarification, made an interesting technical claim, or did not fully cover the concept, generate an adaptive FOLLOW-UP question (e.g., "You mentioned using X to solve Y, how would you handle Z in that scenario?").
-           - If their answer was complete, transition to a new topic testing another competency from the track sample questions.
-        3. Ensure the question is open-ended, realistic, and directly tests their actual capabilities.
-        4. Anchor every question to the track objective above — do not drift into unrelated topics.
-        
-        Return ONLY a JSON object with no markdown formatting and no extra text. Format:
-        {"text": "your question text here", "sourceQuestionId": null}
-        (Note: set "sourceQuestionId" to the ID of a sample question if it tests the exact same concept/keywords, or null if it is a custom follow-up).
-        """.formatted(trackName, desc, cvContext, samples, historySb.toString());
-
-    String response = chatClient.prompt()
-        .system(s -> s.text("""
-            You are an expert interviewer.
-            Generate a single, natural, open-ended question or follow-up question.
-            Return ONLY the JSON object.
-            """))
-        .user(prompt)
-        .call()
-        .content();
-
-    try {
-      return objectMapper.readValue(stripMarkdown(response), GeneratedQuestion.class);
-    } catch (Exception e) {
-      log.warn("Failed to parse next question LLM response: {}", response, e);
-      if (!baseQuestions.isEmpty()) {
-        QuestionBank randomQ = baseQuestions.get((int) (Math.random() * baseQuestions.size()));
-        return new GeneratedQuestion(randomQ.getQuestionText(), randomQ.getId());
-      }
-      return new GeneratedQuestion("Can you describe your experience as a " + trackName + "?", null);
-    }
-  }
 
   @Override
   public ScoreResponse scoreAnswer(Long questionId, Long userId, String transcript) {
@@ -297,6 +221,84 @@ public class LlmServiceImpl implements ILlmService {
     } catch (Exception e) {
       log.warn("Failed to parse CV analysis response: {}", response, e);
       return new CvAnalysis();
+    }
+  }
+
+  @Override
+  public JobDraft parseJobPosting(String rawText) {
+    String trimmed = rawText == null ? "" : rawText.strip();
+    if (trimmed.length() > 12000) {
+      trimmed = trimmed.substring(0, 12000);
+    }
+
+    String prompt = """
+        Extract structured job information from this raw job posting text.
+
+        Job posting text:
+        %s
+
+        Return ONLY raw JSON with no markdown formatting, using this exact shape:
+        {
+          "title": "",
+          "companyName": "",
+          "location": "",
+          "description": "",
+          "employmentType": "",
+          "seniorityLevel": "",
+          "requiredSkills": [],
+          "preferredSkills": [],
+          "technologies": [],
+          "salaryMin": null,
+          "salaryMax": null,
+          "currency": "",
+          "experienceYears": null,
+          "educationLevel": ""
+        }
+        """
+        .formatted(trimmed);
+
+    String response = chatClient.prompt()
+        .system(s -> s.text("""
+            You are a recruiter-grade job parsing expert.
+            Extract structured fields from unstructured job posting text accurately.
+
+            Rules:
+            - title: the exact job title as printed (e.g. "Senior Backend Engineer").
+            - companyName: the employer. Leave null when only a recruitment agency is named.
+            - location: city + country as printed; null if remote and no city is given.
+            - description: a clean, lightly condensed version of the full posting body
+              (responsibilities + requirements). Preserve all technical details and
+              specific numbers. Strip repeated boilerplate lines.
+            - employmentType: exactly one of FULL_TIME, PART_TIME, CONTRACT, INTERNSHIP, or null.
+            - seniorityLevel: exactly one of JUNIOR, MID, SENIOR, LEAD, or null.
+            - requiredSkills: hard requirements explicitly listed as must-have
+              (technologies, languages, frameworks, tools, certifications). 5-15 items.
+            - preferredSkills: nice-to-have skills. Leave empty if the posting does not
+              distinguish required vs preferred.
+            - technologies: the concrete tech stack mentioned anywhere (languages,
+              frameworks, databases, platforms, cloud providers). Deduplicate.
+            - salaryMin/salaryMax: annual figures in the posting's currency when the
+              posting states a salary or range; otherwise null. Convert "120k" to 120000.
+            - currency: ISO 4217 code (USD, EUR, EGP, ...) or null.
+            - experienceYears: the minimum years of experience demanded, else null.
+            - educationLevel: degree or certification required, else null.
+
+            Never invent fields that are not in the text. Use null or empty lists when a
+            field is absent. Return ONLY the JSON object.
+            """))
+        .user(prompt)
+        .call()
+        .content();
+
+    try {
+      return objectMapper.readValue(stripMarkdown(response), JobDraft.class);
+    } catch (Exception e) {
+      log.warn("Failed to parse job posting response: {}", response, e);
+      return new JobDraft(
+          null, null, null,
+          trimmed.length() > 2000 ? trimmed.substring(0, 2000) : trimmed,
+          null, null, List.of(), List.of(), List.of(),
+          null, null, null, null, null);
     }
   }
 
