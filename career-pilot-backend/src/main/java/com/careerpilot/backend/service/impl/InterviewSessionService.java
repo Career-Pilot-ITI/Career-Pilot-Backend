@@ -1,6 +1,5 @@
 package com.careerpilot.backend.service.impl;
 
-import com.careerpilot.backend.controller.advice.WalletException;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.InterviewQuestionDto;
@@ -10,27 +9,22 @@ import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.dto.response.SessionStateResponse;
 import com.careerpilot.backend.dto.response.StartSessionResponse;
 import com.careerpilot.backend.dto.response.SubmitAnswerResponse;
-import com.careerpilot.backend.controller.advice.SessionQuotaException;
-import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
 import com.careerpilot.backend.entity.ENUMs.SessionStatus;
-import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.InterviewSession;
 import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.SessionQuestion;
-import com.careerpilot.backend.entity.Subscription;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.User;
 import com.careerpilot.backend.repository.IInterviewSessionRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
-import com.careerpilot.backend.repository.ISubscriptionRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.repository.IUserRepository;
-import com.careerpilot.backend.service.ICoinWalletService;
 import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.IQuestionScoreService;
+import com.careerpilot.backend.service.ISessionQuotaService;
 import com.careerpilot.backend.service.IUserSkillService;
 import com.careerpilot.backend.service.agent.InterviewAgentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,15 +47,14 @@ public class InterviewSessionService implements IInterviewSessionService {
 
   private final IInterviewSessionRepository sessionRepository;
   private final ISessionQuestionRepository sessionQuestionRepository;
-  private final ISubscriptionRepository subscriptionRepository;
   private final ITrackRepository trackRepository;
   private final IUserRepository userRepository;
   private final IQuestionBankRepository questionBankRepository;
   private final IQuestionScoreRepository questionScoreRepository;
   private final IQuestionScoreService scoreService;
-  private final ICoinWalletService coinWalletService;
   private final IUserSkillService userSkillService;
   private final InterviewAgentService interviewAgentService;
+  private final ISessionQuotaService sessionQuotaService;
   private final ObjectMapper objectMapper;
 
   @Value("${app.session.minutes-per-coin:2}")
@@ -78,7 +71,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     int targetMinutes = request.getDurationMinutes() != null ? request.getDurationMinutes() : 15;
     int sessionCost = Math.max(1, targetMinutes / minutesPerCoin);
-    checkSessionQuota(userId, sessionCost);
+    sessionQuotaService.checkSessionQuota(userId, sessionCost);
 
     Track track = trackRepository.findById(request.getTrackId())
         .orElseThrow(() -> new RuntimeException("Track not found: " + request.getTrackId()));
@@ -403,40 +396,6 @@ public class InterviewSessionService implements IInterviewSessionService {
         .questionOrder(sq.getQuestionOrder())
         .createdAt(sq.getCreatedAt())
         .build();
-  }
-
-  private void checkSessionQuota(Long userId, int sessionCost) {
-    Subscription sub = subscriptionRepository.findByUserId(userId)
-            .orElseGet(() -> {
-              log.warn("No subscription found for user {} during quota check — treating as FREE tier", userId);
-              Subscription defaultFree = new Subscription();
-              defaultFree.setTier(SubscriptionTier.FREE);
-              defaultFree.setFreeTrialUsed(false);
-              return defaultFree;
-            });
-
-    if (sub.getTier() == SubscriptionTier.PLUS || sub.getTier() == SubscriptionTier.PRO) return;
-
-    if (!sub.getFreeTrialUsed()) {
-      long totalSessions = sessionRepository.countByUserId(userId);
-      if (totalSessions == 0) {
-        sub.setFreeTrialUsed(true);
-        subscriptionRepository.save(sub);
-        return;
-      }
-    }
-
-    LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).toLocalDate().atStartOfDay();
-    long monthlyCount = sessionRepository.countByUserIdAndCreatedAtAfter(userId, monthStart);
-
-    if (monthlyCount >= 1) {
-      try {
-        coinWalletService.debit(userId, sessionCost, CoinLedgerReason.SESSION_SPEND, null);
-      } catch (WalletException.InsufficientBalanceException e) {
-        throw new SessionQuotaException.QuotaExceededException(
-                "You have 0 sessions remaining. Subscribe or buy coins.");
-      }
-    }
   }
 
   private SessionQuestionResponse toSessionQuestionResponse(SessionQuestion sq) {
