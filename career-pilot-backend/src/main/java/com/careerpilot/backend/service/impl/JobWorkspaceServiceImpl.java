@@ -51,29 +51,22 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
         .orElseThrow(() -> new RuntimeException("User not found: " + userId));
     Optional<JobListing> jobListing = jobListingRepository.findBySourceUrl(request.getSourceUrl());
     JobListing job;
-    if(jobListing.isPresent()) {
+    if (jobListing.isPresent()) {
       job = jobListing.get();
-    }else {
+    } else {
       JobDraft draft = parseWithEntitlement(userId, request.getDescriptionText());
 
       job = JobListing.fromDraft(draft, user, JobSourceType.MANUAL_TEXT, request.getSourceUrl());
       job = jobListingRepository.save(job);
     }
-    JobWorkspace workspace = JobWorkspace.builder()
-        .user(user)
-        .job(job)
-        .status(JobWorkspaceStatus.SAVED)
-        .build();
-    workspace = jobWorkspaceRepository.save(workspace);
-
-    return JobWorkspaceResponse.from(workspace);
+    return getOrCreateWorkspace(user, job);
   }
 
   @Override
   @Transactional
   public JobWorkspaceResponse importFromUrl(Long userId, ImportJobUrlRequest request) {
     User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        .orElseThrow(() -> new RuntimeException("User not found: " + userId));
     Optional<JobListing> jobListing = jobListingRepository.findBySourceUrl(request.getUrl());
     JobListing job;
     if (jobListing.isPresent()) {
@@ -92,14 +85,7 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
       }
       job = jobListingRepository.save(job);
     }
-    JobWorkspace workspace = JobWorkspace.builder()
-        .user(user)
-        .job(job)
-        .status(JobWorkspaceStatus.SAVED)
-        .build();
-    workspace = jobWorkspaceRepository.save(workspace);
-
-    return JobWorkspaceResponse.from(workspace);
+    return getOrCreateWorkspace(user, job);
   }
 
   @Override
@@ -161,6 +147,18 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
     if (draft.technologies() != null && !draft.technologies().isEmpty()) {
       job.setTechnologies(draft.technologies());
     }
+  }
+
+  private JobWorkspaceResponse getOrCreateWorkspace(User user, JobListing job) {
+    JobWorkspace workspace = jobWorkspaceRepository
+        .findByUserIdAndJobId(user.getId(), job.getId())
+        .orElseGet(() -> jobWorkspaceRepository.save(
+            JobWorkspace.builder()
+                .user(user)
+                .job(job)
+                .status(JobWorkspaceStatus.SAVED)
+                .build()));
+    return JobWorkspaceResponse.from(workspace);
   }
 
 }
