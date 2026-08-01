@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: ${TEAM_NAME:-team1}-career-pilot-api
     restart: unless-stopped
+    mem_limit: ${MEM_LIMIT:-1g}
+    mem_reservation: ${MEM_RESERVATION:-512m}
     healthcheck:
       disable: true
     networks:
