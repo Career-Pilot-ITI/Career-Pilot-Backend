@@ -56,7 +56,7 @@ public class CoinWalletServiceImpl implements ICoinWalletService {
       return false;
     }
     wallet.setBalance(wallet.getBalance() - amount);
-    ledgerRepository.save(new CoinLedgerEntry(userId, -amount, reason));
+    writeLedgerEntry(wallet, -amount, reason, null);
     return true;
   }
 
