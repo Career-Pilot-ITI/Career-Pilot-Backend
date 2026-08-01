@@ -4,8 +4,12 @@ import com.careerpilot.backend.controller.response.ApiResponse;
 import com.careerpilot.backend.dto.request.ImportJobTextRequest;
 import com.careerpilot.backend.dto.request.ImportJobUrlRequest;
 import com.careerpilot.backend.dto.request.UpdateWorkspaceStatusRequest;
+import com.careerpilot.backend.dto.response.AtsScoreResponse;
+import com.careerpilot.backend.dto.response.CoverLetterResponse;
+import com.careerpilot.backend.dto.response.CvOptimizationResponse;
 import com.careerpilot.backend.dto.response.JobWorkspaceResponse;
 import com.careerpilot.backend.security.SecurityUtil;
+import com.careerpilot.backend.service.IJobWorkspaceAiService;
 import com.careerpilot.backend.service.IJobWorkspaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -27,6 +31,7 @@ import java.util.List;
 public class JobWorkspaceController {
 
     private final IJobWorkspaceService workspaceService;
+    private final IJobWorkspaceAiService workspaceAiService;
     private final SecurityUtil securityUtil;
 
     @PostMapping("/import/text")
@@ -101,6 +106,45 @@ public class JobWorkspaceController {
                 .success(true)
                 .message("Workspace status updated")
                 .data(workspace)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/{id}/score-cv")
+    @Operation(summary = "Score the user's CV against the job",
+            description = "Detailed ATS-style relevance analysis of the CV against the workspace's job posting. Coin-gated for FREE tier; PLUS/PRO are free.")
+    public ResponseEntity<ApiResponse> scoreCv(@PathVariable Long id) {
+        AtsScoreResponse result = workspaceAiService.scoreCv(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.builder()
+                .success(true)
+                .message("CV scored")
+                .data(result)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/{id}/cv/optimize")
+    @Operation(summary = "Optimize the user's CV for the job",
+            description = "Rewrites the CV to better match the job posting, using post-interview skill scores, and recommends the best tracks to cover remaining skill gaps. Coin-gated for FREE tier; PLUS/PRO are free.")
+    public ResponseEntity<ApiResponse> optimizeCv(@PathVariable Long id) {
+        CvOptimizationResponse result = workspaceAiService.optimizeCv(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.builder()
+                .success(true)
+                .message("CV optimized")
+                .data(result)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/{id}/cover-letter")
+    @Operation(summary = "Generate a cover letter for the job",
+            description = "Writes a personalized cover letter with company research. Research depth depends on tier: PRO researches agentically, PLUS gets one trimmed search, FREE uses service-side search. Coin-gated for FREE tier; PLUS/PRO are free.")
+    public ResponseEntity<ApiResponse> generateCoverLetter(@PathVariable Long id) {
+        CoverLetterResponse result = workspaceAiService.generateCoverLetter(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.builder()
+                .success(true)
+                .message("Cover letter generated")
+                .data(result)
                 .timestamp(LocalDateTime.now())
                 .build());
     }
