@@ -2,16 +2,24 @@ package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.service.ILlmService;
 
+import com.careerpilot.backend.dto.response.AtsScore;
+import com.careerpilot.backend.dto.response.CoverLetterDraft;
 import com.careerpilot.backend.dto.response.CvAnalysis;
+import com.careerpilot.backend.dto.response.CvOptimization;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.JobDraft;
 import com.careerpilot.backend.dto.response.ScoreResponse;
 import com.careerpilot.backend.entity.ENUMs.DocType;
+import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.FeedbackReport;
+import com.careerpilot.backend.entity.JobListing;
 import com.careerpilot.backend.entity.QuestionBank;
 import com.careerpilot.backend.entity.QuestionScore;
 import com.careerpilot.backend.entity.RagContextDocument;
 import com.careerpilot.backend.entity.SessionQuestion;
+import com.careerpilot.backend.entity.Track;
+import com.careerpilot.backend.entity.UserProfile;
+import com.careerpilot.backend.entity.UserSkill;
 
 import com.careerpilot.backend.repository.IFeedbackReportRepository;
 import com.careerpilot.backend.repository.IQuestionBankRepository;
@@ -300,6 +308,259 @@ public class LlmServiceImpl implements ILlmService {
           null, null, List.of(), List.of(), List.of(),
           null, null, null, null, null);
     }
+  }
+
+  @Override
+  public AtsScore scoreCv(String cvText, JobListing job) {
+    String jobCtx = buildJobContext(job);
+    String cv = cvText == null ? "" : cvText.strip();
+
+    String prompt = """
+        Score how relevant this candidate's CV is to the job posting. Be detailed and specific.
+
+        JOB POSTING:
+        %s
+
+        CANDIDATE CV:
+        %s
+
+        Return ONLY raw JSON with no markdown formatting, using this exact shape:
+        {
+          "overallScore": 0,
+          "matchPercentage": 0,
+          "matchedSkills": [],
+          "missingRequiredSkills": [],
+          "missingPreferredSkills": [],
+          "strengths": [],
+          "weaknesses": [],
+          "sections": [
+            {"section": "Experience", "score": 0, "feedback": ""}
+          ],
+          "recommendations": []
+        }
+
+        Guidelines:
+        - overallScore: 0-100 overall CV-to-job fit.
+        - matchPercentage: how much of the job's required skill set the CV covers.
+        - matchedSkills: job skills explicitly present in the CV.
+        - missingRequiredSkills: required skills absent from the CV.
+        - missingPreferredSkills: preferred skills absent from the CV.
+        - strengths/weaknesses: specific, evidence-based, tied to the posting.
+        - sections: evaluate CV sections (Summary, Experience, Education, Skills, Projects) individually.
+        - recommendations: concrete, prioritized edits the candidate can make to improve the score.
+        Base every claim on the actual CV text. Do not invent skills.
+        """
+        .formatted(jobCtx, cv);
+
+    String response = chatClient.prompt()
+        .system(s -> s.text("""
+            You are an expert ATS (Applicant Tracking System) reviewer and recruiter.
+            Evaluate CV-to-job relevance precisely. Be critical but constructive.
+            """))
+        .user(prompt)
+        .call()
+        .content();
+
+    try {
+      return objectMapper.readValue(stripMarkdown(response), AtsScore.class);
+    } catch (Exception e) {
+      log.warn("Failed to parse ATS score response: {}", response, e);
+      return new AtsScore();
+    }
+  }
+
+  @Override
+  public CvOptimization optimizeCv(String cvText, JobListing job, List<UserSkill> skills,
+      List<Track> tracks) {
+    String jobCtx = buildJobContext(job);
+    String cv = cvText == null ? "" : cvText.strip();
+    String skillCtx = buildSkillsContext(skills);
+    String trackCtx = buildTracksContext(tracks);
+
+    String prompt = """
+        Rewrite this CV to maximize its fit for the job posting. The candidate has taken
+        practice interviews, so their validated skills (with performance scores) are included.
+        Also recommend the best tracks to cover the remaining skill gaps.
+
+        JOB POSTING:
+        %s
+
+        CURRENT CV:
+        %s
+
+        CANDIDATE'S VALIDATED SKILLS (skill: performanceScore/100, timesAssessed):
+        %s
+
+        AVAILABLE TRACKS:
+        %s
+
+        Return ONLY raw JSON with no markdown formatting, using this exact shape:
+        {
+          "optimizedCv": "...",
+          "recommendedTracks": []
+        }
+
+        Guidelines:
+        - optimizedCv: a full, polished, markdown-formatted CV that keeps the candidate's real
+          facts (never invent experience, degrees, or employers) but reframes and reorders content
+          to emphasize the skills the job requires. Where a required skill is validated by the
+          candidate's interview scores, highlight it prominently with evidence.
+        - recommendedTracks: names of tracks from AVAILABLE TRACKS that best cover the candidate's
+          missing required skills. Only use track names that exist in the AVAILABLE TRACKS list.
+        """
+        .formatted(jobCtx, cv, skillCtx, trackCtx);
+
+    String response = chatClient.prompt()
+        .system(s -> s.text("""
+            You are a senior career coach and resume writer who optimizes CVs for ATS systems.
+            Preserve truthfulness 100% — never fabricate facts. Use the validated skill scores to
+            decide what to emphasize and which tracks to recommend.
+            """))
+        .user(prompt)
+        .call()
+        .content();
+
+    try {
+      return objectMapper.readValue(stripMarkdown(response), CvOptimization.class);
+    } catch (Exception e) {
+      log.warn("Failed to parse CV optimization response: {}", response, e);
+      return new CvOptimization(cv, List.of());
+    }
+  }
+
+  @Override
+  public CoverLetterDraft generateCoverLetter(String cvText, JobListing job, UserProfile profile,
+      String companyResearch, SubscriptionTier tier) {
+    String jobCtx = buildJobContext(job);
+    String cv = cvText == null ? "" : cvText.strip();
+    String profileCtx = buildProfileContext(profile);
+    String research = companyResearch == null || companyResearch.isBlank()
+        ? "No company research available."
+        : companyResearch.strip();
+    String researchGuidance = buildTierResearchGuidance(tier);
+
+    String prompt = """
+        Write a personalized cover letter for this job application, plus advice on the best way
+        to approach the company.
+
+        JOB POSTING:
+        %s
+
+        CANDIDATE CV:
+        %s
+
+        CANDIDATE PROFILE:
+        %s
+
+        COMPANY RESEARCH:
+        %s
+
+        RESEARCH GUIDANCE:
+        %s
+
+        Return ONLY raw JSON with no markdown formatting, using this exact shape:
+        {
+          "coverLetter": "...",
+          "approachTips": "..."
+        }
+
+        Guidelines:
+        - coverLetter: 3-4 short paragraphs, addressed to the hiring team, tailored to the job and
+          company. Reference the candidate's strongest, job-relevant facts from the CV. Only cite
+          company facts that appear in the COMPANY RESEARCH. Never invent company facts.
+        - approachTips: 3-5 concrete, actionable tips on the best way to approach this company
+          (channel, timing, what to highlight, follow-up), grounded in the research where possible.
+        """
+        .formatted(jobCtx, cv, profileCtx, research, researchGuidance);
+
+    String response = chatClient.prompt()
+        .system(s -> s.text("""
+            You are an expert career coach and cover letter writer.
+            Match the candidate's strengths to the company's needs. Stay truthful about both the
+            candidate and the company. The company research may be limited or unreliable — follow
+            the research guidance carefully and never invent facts.
+            """))
+        .user(prompt)
+        .call()
+        .content();
+
+    try {
+      return objectMapper.readValue(stripMarkdown(response), CoverLetterDraft.class);
+    } catch (Exception e) {
+      log.warn("Failed to parse cover letter response: {}", response, e);
+      return new CoverLetterDraft();
+    }
+  }
+
+  private String buildJobContext(JobListing job) {
+    if (job == null)
+      return "No job posting available.";
+    StringBuilder sb = new StringBuilder();
+    sb.append("Title: ").append(nvl(job.getTitle())).append("\n");
+    sb.append("Company: ").append(nvl(job.getCompanyName())).append("\n");
+    sb.append("Location: ").append(nvl(job.getLocation())).append("\n");
+    sb.append("Employment type: ").append(nvl(job.getEmploymentType())).append("\n");
+    sb.append("Seniority: ").append(nvl(job.getSeniorityLevel())).append("\n");
+    sb.append("Required skills: ").append(job.getRequiredSkills() != null
+        ? String.join(", ", job.getRequiredSkills()) : "").append("\n");
+    sb.append("Preferred skills: ").append(job.getPreferredSkills() != null
+        ? String.join(", ", job.getPreferredSkills()) : "").append("\n");
+    sb.append("Technologies: ").append(job.getTechnologies() != null
+        ? String.join(", ", job.getTechnologies()) : "").append("\n");
+    sb.append("Responsibilities:\n").append(nvl(job.getResponsibilities())).append("\n");
+    sb.append("Qualifications:\n").append(nvl(job.getQualifications())).append("\n");
+    sb.append("Description:\n").append(nvl(job.getDescription())).append("\n");
+    return sb.toString();
+  }
+
+  private String buildSkillsContext(List<UserSkill> skills) {
+    if (skills == null || skills.isEmpty())
+      return "No validated skills yet.";
+    return skills.stream()
+        .map(s -> "- " + nvl(s.getSkillName()) + ": " + nvl(s.getPerformanceScore()) + "/100, assessed "
+            + nvl(s.getTimesAssessed()) + " time(s)")
+        .collect(Collectors.joining("\n"));
+  }
+
+  private String buildTracksContext(List<Track> tracks) {
+    if (tracks == null || tracks.isEmpty())
+      return "No tracks available.";
+    return tracks.stream()
+        .map(t -> "- " + nvl(t.getName()) + (t.getDescription() != null && !t.getDescription().isBlank()
+            ? ": " + t.getDescription() : ""))
+        .collect(Collectors.joining("\n"));
+  }
+
+  private String buildProfileContext(UserProfile profile) {
+    if (profile == null)
+      return "No profile available.";
+    StringBuilder sb = new StringBuilder();
+    sb.append("Name: ").append(nvl(profile.getDisplayName())).append("\n");
+    sb.append("Target role: ").append(nvl(profile.getTargetRole())).append("\n");
+    sb.append("Current job title: ").append(nvl(profile.getCurrentJobTitle())).append("\n");
+    sb.append("Years of experience: ").append(nvl(profile.getYearsOfExperience())).append("\n");
+    sb.append("Education level: ").append(nvl(profile.getEducationLevel())).append("\n");
+    sb.append("Industry: ").append(nvl(profile.getIndustry())).append("\n");
+    sb.append("Experience level: ").append(nvl(profile.getExperienceLevel())).append("\n");
+    sb.append("Target companies: ").append(nvl(profile.getTargetCompanies())).append("\n");
+    return sb.toString();
+  }
+
+  private String buildTierResearchGuidance(SubscriptionTier tier) {
+    if (tier == null)
+      tier = SubscriptionTier.FREE;
+    return switch (tier) {
+      case PRO -> "The company research is extensive and reliable (agent performed many searches). "
+          + "Use specific company facts such as projects, funding, and values freely.";
+      case PLUS -> "The company research is a single trimmed search result. You may use the facts "
+          + "it contains, but do not over-claim specifics that are not present.";
+      case FREE -> "The company research is limited and may be unreliable. Base the letter mostly "
+          + "on the CV and job posting; only use company facts that clearly appear in the research.";
+    };
+  }
+
+  private String nvl(Object value) {
+    return value == null ? "" : value.toString();
   }
 
   private String buildIdealAnswerContext(Long questionId) {

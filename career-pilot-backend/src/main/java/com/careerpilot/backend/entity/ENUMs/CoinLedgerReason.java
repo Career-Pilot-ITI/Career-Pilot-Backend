@@ -4,6 +4,9 @@ public enum CoinLedgerReason {
     TOP_UP,
     SESSION_SPEND,
     JOB_PARSE,
+    ATS_SCORE,
+    CV_OPTIMIZE,
+    COVER_LETTER,
     REFUND,
     ADMIN_ADJUSTMENT
 }

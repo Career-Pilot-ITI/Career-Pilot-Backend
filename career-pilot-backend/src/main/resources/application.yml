@@ -133,6 +133,13 @@ app:
     minutes-per-coin: ${MINUTES_PER_COIN:2}
   job-parse:
     coin-cost: ${JOB_PARSE_COIN_COST:1}
+  ats-score:
+    coin-cost: ${ATS_SCORE_COIN_COST:2}
+  cv-optimize:
+    coin-cost: ${CV_OPTIMIZE_COIN_COST:2}
+  cover-letter:
+    coin-cost: ${COVER_LETTER_COIN_COST:2}
+    plus-search-max-chars: ${COVER_LETTER_PLUS_SEARCH_MAX_CHARS:1500}
   upload:
     path: ${UPLOAD_PATH:./uploads}
   redirect:
