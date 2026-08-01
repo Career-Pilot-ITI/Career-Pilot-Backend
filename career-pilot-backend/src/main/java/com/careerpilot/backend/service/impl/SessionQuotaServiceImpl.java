@@ -60,15 +60,10 @@ public class SessionQuotaServiceImpl implements ISessionQuotaService {
     }
 
     @Override
-    @Transactional
-    public boolean tryDebit(Long userId, int amount, CoinLedgerReason reason) {
-        try {
-            coinWalletService.debit(userId, amount, reason, null);
-            return true;
-        } catch (WalletException.InsufficientBalanceException e) {
-            return false;
-        }
-    }
+   @Transactional
+public boolean tryDebit(Long userId, int amount, CoinLedgerReason reason) {
+    return coinWalletService.tryDebit(userId, amount, reason, null); 
+}
 
     private Subscription resolveSubscription(Long userId) {
         return subscriptionRepository.findByUserId(userId)
