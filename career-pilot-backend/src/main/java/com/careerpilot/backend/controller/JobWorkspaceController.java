@@ -37,7 +37,7 @@ public class JobWorkspaceController {
     @PostMapping("/import/text")
     @Operation(summary = "Import a job from pasted text",
             description = "Parses raw job description text via LLM, saves the JobListing, and creates a JobWorkspace.")
-    public ResponseEntity<ApiResponse> importFromText(@Valid @RequestBody ImportJobTextRequest request) {
+    public ResponseEntity<ApiResponse<JobWorkspaceResponse>> importFromText(@Valid @RequestBody ImportJobTextRequest request) {
         JobWorkspaceResponse workspace = workspaceService.importFromText(securityUtil.getCurrentUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.builder()
                 .success(true)
@@ -50,7 +50,7 @@ public class JobWorkspaceController {
     @PostMapping("/import/url")
     @Operation(summary = "Import a job from a URL",
             description = "Fetches the job posting (LinkedIn via ChocoData, others via HTML fetch), parses it, and creates a JobWorkspace. Reuses a cached job when the source URL was already imported.")
-    public ResponseEntity<ApiResponse> importFromUrl(@Valid @RequestBody ImportJobUrlRequest request) {
+    public ResponseEntity<ApiResponse<JobWorkspaceResponse>> importFromUrl(@Valid @RequestBody ImportJobUrlRequest request) {
         JobWorkspaceResponse workspace = workspaceService.importFromUrl(securityUtil.getCurrentUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.builder()
                 .success(true)
@@ -62,7 +62,7 @@ public class JobWorkspaceController {
 
     @GetMapping
     @Operation(summary = "List the user's job workspaces")
-    public ResponseEntity<ApiResponse> listWorkspaces() {
+    public ResponseEntity<ApiResponse<List<JobWorkspaceResponse>>> listWorkspaces() {
         List<JobWorkspaceResponse> workspaces = workspaceService.listWorkspaces(securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -74,7 +74,7 @@ public class JobWorkspaceController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a single job workspace")
-    public ResponseEntity<ApiResponse> getWorkspace(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<JobWorkspaceResponse>> getWorkspace(@PathVariable Long id) {
         JobWorkspaceResponse workspace = workspaceService.getWorkspace(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -86,7 +86,7 @@ public class JobWorkspaceController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a job workspace")
-    public ResponseEntity<ApiResponse> deleteWorkspace(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> deleteWorkspace(@PathVariable Long id) {
         workspaceService.deleteWorkspace(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -98,7 +98,7 @@ public class JobWorkspaceController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "Update a workspace's application status",
             description = "Moves the workspace through the pipeline: SAVED, APPLYING, INTERVIEWING, OFFER, ARCHIVED.")
-    public ResponseEntity<ApiResponse> updateStatus(@PathVariable Long id,
+    public ResponseEntity<ApiResponse<JobWorkspaceResponse>> updateStatus(@PathVariable Long id,
                                                     @Valid @RequestBody UpdateWorkspaceStatusRequest request) {
         JobWorkspaceResponse workspace = workspaceService.updateStatus(
                 id, securityUtil.getCurrentUserId(), request.getStatus());
@@ -113,7 +113,7 @@ public class JobWorkspaceController {
     @PostMapping("/{id}/score-cv")
     @Operation(summary = "Score the user's CV against the job",
             description = "Detailed ATS-style relevance analysis of the CV against the workspace's job posting. Coin-gated for FREE tier; PLUS/PRO are free.")
-    public ResponseEntity<ApiResponse> scoreCv(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<AtsScoreResponse>> scoreCv(@PathVariable Long id) {
         AtsScoreResponse result = workspaceAiService.scoreCv(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -126,7 +126,7 @@ public class JobWorkspaceController {
     @PostMapping("/{id}/cv/optimize")
     @Operation(summary = "Optimize the user's CV for the job",
             description = "Rewrites the CV to better match the job posting, using post-interview skill scores, and recommends the best tracks to cover remaining skill gaps. Coin-gated for FREE tier; PLUS/PRO are free.")
-    public ResponseEntity<ApiResponse> optimizeCv(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<CvOptimizationResponse>> optimizeCv(@PathVariable Long id) {
         CvOptimizationResponse result = workspaceAiService.optimizeCv(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -139,7 +139,7 @@ public class JobWorkspaceController {
     @PostMapping("/{id}/cover-letter")
     @Operation(summary = "Generate a cover letter for the job",
             description = "Writes a personalized cover letter with company research. Research depth depends on tier: PRO researches agentically, PLUS gets one trimmed search, FREE uses service-side search. Coin-gated for FREE tier; PLUS/PRO are free.")
-    public ResponseEntity<ApiResponse> generateCoverLetter(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<CoverLetterResponse>> generateCoverLetter(@PathVariable Long id) {
         CoverLetterResponse result = workspaceAiService.generateCoverLetter(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)

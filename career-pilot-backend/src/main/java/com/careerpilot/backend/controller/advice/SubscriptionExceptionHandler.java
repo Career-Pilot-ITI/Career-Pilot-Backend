@@ -12,16 +12,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 public class SubscriptionExceptionHandler {
 
     @ExceptionHandler(SubscriptionException.NoActiveSubscriptionException.class)
-    public ResponseEntity<ApiResponse> handleNoActiveSubscription(SubscriptionException.NoActiveSubscriptionException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleNoActiveSubscription(SubscriptionException.NoActiveSubscriptionException ex) {
         return buildResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(SubscriptionException.InvalidTierException.class)
-    public ResponseEntity<ApiResponse> handleInvalidTier(SubscriptionException.InvalidTierException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleInvalidTier(SubscriptionException.InvalidTierException ex) {
         return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
-    private ResponseEntity<ApiResponse> buildResponse(String message, HttpStatus status) {
+    private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {
         return new ResponseEntity<>(new ApiResponse(message), status);
     }
 }

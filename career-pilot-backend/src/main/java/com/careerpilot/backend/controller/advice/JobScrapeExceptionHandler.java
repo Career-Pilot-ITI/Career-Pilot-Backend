@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 public class JobScrapeExceptionHandler {
 
     @ExceptionHandler(JobScrapeException.class)
-    public ResponseEntity<ApiResponse> handle(JobScrapeException ex) {
+    public ResponseEntity<ApiResponse<Void>> handle(JobScrapeException ex) {
         return ResponseEntity.status(ex.getHttpStatus())
                 .body(ApiResponse.builder()
                         .success(false)

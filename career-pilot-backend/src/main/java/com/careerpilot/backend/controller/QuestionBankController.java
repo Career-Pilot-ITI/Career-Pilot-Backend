@@ -33,7 +33,7 @@ public class QuestionBankController {
     @Operation(summary = "Create a question")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Question created",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> createQuestion(
+    public ResponseEntity<ApiResponse<QuestionResponse>> createQuestion(
             @Valid @RequestBody CreateQuestionRequest request) {
         QuestionResponse question = questionService.createQuestion(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -51,7 +51,7 @@ public class QuestionBankController {
     @Operation(summary = "Get a question by ID")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Question found",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> getQuestion(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<QuestionResponse>> getQuestion(@PathVariable Long id) {
         QuestionResponse question = questionService.getQuestion(id);
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -65,7 +65,7 @@ public class QuestionBankController {
     @Operation(summary = "List all questions (paginated)")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Paginated list of questions",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> getAllQuestions(
+    public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getAllQuestions(
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size,
             @RequestParam(required = false, defaultValue = "createdAt") String sortBy,
@@ -86,7 +86,7 @@ public class QuestionBankController {
     @Operation(summary = "Get questions by track (paginated)")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions by track",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> getQuestionsByTrack(
+    public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getQuestionsByTrack(
             @PathVariable Long trackId,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size) {
@@ -106,7 +106,7 @@ public class QuestionBankController {
     @Operation(summary = "Get questions by difficulty (paginated)")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions by difficulty",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> getQuestionsByDifficulty(
+    public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getQuestionsByDifficulty(
             @PathVariable String difficulty,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size) {
@@ -126,7 +126,7 @@ public class QuestionBankController {
     @Operation(summary = "Get questions by category (paginated)")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions by category",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> getQuestionsByCategory(
+    public ResponseEntity<ApiResponse<Page<QuestionResponse>>> getQuestionsByCategory(
             @PathVariable String category,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size) {
@@ -146,7 +146,7 @@ public class QuestionBankController {
     @Operation(summary = "Search questions by text (paginated)")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Search results",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> searchQuestions(
+    public ResponseEntity<ApiResponse<Page<QuestionResponse>>> searchQuestions(
             @RequestParam String text,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size) {
@@ -168,7 +168,7 @@ public class QuestionBankController {
     @Operation(summary = "Update a question")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Question updated",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> updateQuestion(
+    public ResponseEntity<ApiResponse<QuestionResponse>> updateQuestion(
             @PathVariable Long id,
             @Valid @RequestBody UpdateQuestionRequest request) {
 
@@ -185,7 +185,7 @@ public class QuestionBankController {
     @Operation(summary = "Toggle question active status")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Status toggled",
         content = @Content(schema = @Schema(implementation = QuestionResponse.class)))
-    public ResponseEntity<ApiResponse> toggleQuestionStatus(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<QuestionResponse>> toggleQuestionStatus(@PathVariable Long id) {
         QuestionResponse question = questionService.toggleQuestionStatus(id);
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -201,7 +201,7 @@ public class QuestionBankController {
     @Operation(summary = "Delete a question")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Question deleted",
         content = @Content(schema = @Schema(implementation = ApiResponse.class)))
-    public ResponseEntity<ApiResponse> deleteQuestion(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> deleteQuestion(@PathVariable Long id) {
         questionService.deleteQuestion(id);
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -214,7 +214,7 @@ public class QuestionBankController {
     @Operation(summary = "Delete all questions for a track")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Questions deleted",
         content = @Content(schema = @Schema(implementation = ApiResponse.class)))
-    public ResponseEntity<ApiResponse> deleteQuestionsByTrack(@PathVariable Long trackId) {
+    public ResponseEntity<ApiResponse<Void>> deleteQuestionsByTrack(@PathVariable Long trackId) {
         questionService.deleteQuestionsByTrack(trackId);
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)

@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 public class InterviewExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ApiResponse> handleIllegalState(IllegalStateException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
         log.warn("Interview operation conflict: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.builder()

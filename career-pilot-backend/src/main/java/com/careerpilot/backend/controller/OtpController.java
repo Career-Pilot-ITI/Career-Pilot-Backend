@@ -30,9 +30,9 @@ public class OtpController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP sent"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Cooldown active, lockout active, or resend limit reached", content = @Content)
     })
-    public ResponseEntity<ApiResponse> sendOtp(@Valid @RequestBody SendOtpRequest request) {
+    public ResponseEntity<ApiResponse<Void>> sendOtp(@Valid @RequestBody SendOtpRequest request) {
         iAuthentication.sendOtp(request.getPhoneNumber());
-        return ResponseEntity.ok(new ApiResponse("OTP sent"));
+        return ResponseEntity.ok(new ApiResponse<>("OTP sent"));
     }
 
     @PostMapping("/verify")

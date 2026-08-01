@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 public class SessionQuotaExceptionHandler {
 
     @ExceptionHandler(SessionQuotaException.QuotaExceededException.class)
-    public ResponseEntity<ApiResponse> handleQuotaExceeded(SessionQuotaException.QuotaExceededException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleQuotaExceeded(SessionQuotaException.QuotaExceededException ex) {
         return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.TOO_MANY_REQUESTS);
     }
 }

@@ -13,69 +13,69 @@ import com.careerpilot.backend.controller.response.ApiResponse;
 public class AuthExceptionHandler {
 
   @ExceptionHandler(AuthException.UserAlreadyExistsException.class)
-  public ResponseEntity<ApiResponse> handleUserAlreadyExistsException(AuthException.UserAlreadyExistsException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleUserAlreadyExistsException(AuthException.UserAlreadyExistsException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
   }
 
   @ExceptionHandler(AuthException.UsernameAlreadyExistsException.class)
-  public ResponseEntity<ApiResponse> handleUsernameAlreadyExistsException(
+  public ResponseEntity<ApiResponse<Void>> handleUsernameAlreadyExistsException(
       AuthException.UsernameAlreadyExistsException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
   }
 
   @ExceptionHandler(AuthException.UserNotFoundException.class)
-  public ResponseEntity<ApiResponse> handleUserNotFoundException(AuthException.UserNotFoundException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleUserNotFoundException(AuthException.UserNotFoundException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
   }
 
   @ExceptionHandler(AuthException.AccountNotVerifiedException.class)
-  public ResponseEntity<ApiResponse> handleAccountNotVerifiedException(AuthException.AccountNotVerifiedException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleAccountNotVerifiedException(AuthException.AccountNotVerifiedException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.FORBIDDEN);
   }
 
   @ExceptionHandler(AuthException.VerificationCodeExpiredException.class)
-  public ResponseEntity<ApiResponse> handleVerificationCodeExpiredException(
+  public ResponseEntity<ApiResponse<Void>> handleVerificationCodeExpiredException(
       AuthException.VerificationCodeExpiredException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
   }
 
   @ExceptionHandler(AuthException.InvalidVerificationCodeException.class)
-  public ResponseEntity<ApiResponse> handleInvalidVerificationCodeException(
+  public ResponseEntity<ApiResponse<Void>> handleInvalidVerificationCodeException(
       AuthException.InvalidVerificationCodeException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
   }
 
   @ExceptionHandler(RateLimitExceededException.class)
-  public ResponseEntity<ApiResponse> handleRateLimitExceededException(RateLimitExceededException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleRateLimitExceededException(RateLimitExceededException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
   }
 
   @ExceptionHandler(AuthException.OtpExpiredException.class)
-  public ResponseEntity<ApiResponse> handleOtpExpired(AuthException.OtpExpiredException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleOtpExpired(AuthException.OtpExpiredException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.GONE);
   }
 
   @ExceptionHandler(AuthException.InvalidOtpException.class)
-  public ResponseEntity<ApiResponse> handleInvalidOtp(AuthException.InvalidOtpException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleInvalidOtp(AuthException.InvalidOtpException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
   }
 
   @ExceptionHandler(AuthException.OtpCooldownException.class)
-  public ResponseEntity<ApiResponse> handleOtpCooldown(AuthException.OtpCooldownException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleOtpCooldown(AuthException.OtpCooldownException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
   }
 
   @ExceptionHandler(AuthException.OtpLockoutException.class)
-  public ResponseEntity<ApiResponse> handleOtpLockout(AuthException.OtpLockoutException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleOtpLockout(AuthException.OtpLockoutException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
   }
 
   @ExceptionHandler(AuthException.OtpResendLimitException.class)
-  public ResponseEntity<ApiResponse> handleOtpResendLimit(AuthException.OtpResendLimitException ex) {
+  public ResponseEntity<ApiResponse<Void>> handleOtpResendLimit(AuthException.OtpResendLimitException ex) {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  private ResponseEntity<ApiResponse> buildResponse(String message, HttpStatus status) {
+  private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {
     ApiResponse apiResponse = new ApiResponse(message);
     return new ResponseEntity<>(apiResponse, status);
   }

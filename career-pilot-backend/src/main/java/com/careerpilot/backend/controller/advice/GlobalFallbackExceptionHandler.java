@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 public class GlobalFallbackExceptionHandler {
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse> handleUnexpected(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex) {
         String message = ex.getMessage() != null ? ex.getMessage() : "An unexpected error occurred. Please try again later.";
         return new ResponseEntity<>(
                 new ApiResponse(message),

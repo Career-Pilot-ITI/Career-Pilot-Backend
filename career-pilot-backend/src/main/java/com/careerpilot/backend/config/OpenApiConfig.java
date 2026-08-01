@@ -4,9 +4,12 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.media.BooleanSchema;
 import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.DateTimeSchema;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
@@ -20,13 +23,11 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
-  private static final String API_RESPONSE_REF = "#/components/schemas/ApiResponse";
-
   @Bean
   public OpenAPI customOpenAPI() {
     Content errorContent = new Content()
         .addMediaType("application/json", new MediaType()
-            .schema(new Schema<>().$ref(API_RESPONSE_REF)));
+            .schema(errorEnvelopeSchema()));
 
     Server testServer = new Server()
         .url("https://career-pilot-backend-production.up.railway.app")
@@ -66,7 +67,7 @@ public class OpenApiConfig {
   private void addStandardErrorResponses(Operation operation) {
     String json = "application/json";
     Content content = new Content().addMediaType(json, new MediaType()
-        .schema(new Schema<>().$ref(API_RESPONSE_REF)));
+        .schema(errorEnvelopeSchema()));
 
     operation.getResponses()
         .addApiResponse("400", new ApiResponse()
@@ -87,5 +88,14 @@ public class OpenApiConfig {
         .addApiResponse("500", new ApiResponse()
             .description("Internal server error")
             .content(content));
+  }
+
+  private Schema<?> errorEnvelopeSchema() {
+    return new Schema<>()
+        .type("object")
+        .addProperty("message", new StringSchema())
+        .addProperty("success", new BooleanSchema())
+        .addProperty("timestamp", new DateTimeSchema())
+        .addProperty("data", new Schema<>());
   }
 }

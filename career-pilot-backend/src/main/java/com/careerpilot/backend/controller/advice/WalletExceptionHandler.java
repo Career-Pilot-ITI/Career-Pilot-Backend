@@ -12,21 +12,21 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 public class WalletExceptionHandler {
 
     @ExceptionHandler(WalletException.InsufficientBalanceException.class)
-    public ResponseEntity<ApiResponse> handleInsufficientBalance(WalletException.InsufficientBalanceException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleInsufficientBalance(WalletException.InsufficientBalanceException ex) {
         return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(WalletException.WalletNotFoundException.class)
-    public ResponseEntity<ApiResponse> handleWalletNotFound(WalletException.WalletNotFoundException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleWalletNotFound(WalletException.WalletNotFoundException ex) {
         return buildResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(WalletException.InvalidCoinPackException.class)
-    public ResponseEntity<ApiResponse> handleInvalidCoinPack(WalletException.InvalidCoinPackException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleInvalidCoinPack(WalletException.InvalidCoinPackException ex) {
         return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
-    private ResponseEntity<ApiResponse> buildResponse(String message, HttpStatus status) {
+    private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {
         return new ResponseEntity<>(new ApiResponse(message), status);
     }
 }

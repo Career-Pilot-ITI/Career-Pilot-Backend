@@ -69,7 +69,7 @@ public class InterviewSessionController {
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Session started",
         content = @Content(schema = @Schema(implementation = StartSessionResponse.class)))
-    public ResponseEntity<ApiResponse> startSession(@Valid @RequestBody StartSessionRequest request) {
+    public ResponseEntity<ApiResponse<StartSessionResponse>> startSession(@Valid @RequestBody StartSessionRequest request) {
         StartSessionResponse session = sessionService.startSession(request, getCurrentUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.builder()
                 .success(true)
@@ -103,7 +103,7 @@ public class InterviewSessionController {
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Answer processed",
         content = @Content(schema = @Schema(implementation = SubmitAnswerResponse.class)))
-    public ResponseEntity<ApiResponse> submitAnswer(
+    public ResponseEntity<ApiResponse<SubmitAnswerResponse>> submitAnswer(
             @PathVariable Long sessionId,
             @Valid @RequestBody SubmitAnswerRequest request) {
 
@@ -137,7 +137,7 @@ public class InterviewSessionController {
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Feedback report",
         content = @Content(schema = @Schema(implementation = FeedbackReportResponse.class)))
-    public ResponseEntity<ApiResponse> getFeedbackReport(@PathVariable Long sessionId) {
+    public ResponseEntity<ApiResponse<FeedbackReportResponse>> getFeedbackReport(@PathVariable Long sessionId) {
         FeedbackReportResponse report = feedbackReportService.getFeedbackReport(sessionId, getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -168,7 +168,7 @@ public class InterviewSessionController {
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session state",
         content = @Content(schema = @Schema(implementation = SessionStateResponse.class)))
-    public ResponseEntity<ApiResponse> getSessionState(@PathVariable Long sessionId) {
+    public ResponseEntity<ApiResponse<SessionStateResponse>> getSessionState(@PathVariable Long sessionId) {
         SessionStateResponse state = sessionService.getSessionState(sessionId, getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -193,7 +193,7 @@ public class InterviewSessionController {
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Paginated list of sessions",
         content = @Content(schema = @Schema(implementation = Page.class)))
-    public ResponseEntity<ApiResponse> listSessions(
+    public ResponseEntity<ApiResponse<Page<InterviewSessionResponse>>> listSessions(
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -214,7 +214,7 @@ public class InterviewSessionController {
     @Operation(summary = "Get session detail")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session detail",
         content = @Content(schema = @Schema(implementation = InterviewSessionResponse.class)))
-    public ResponseEntity<ApiResponse> getSession(@PathVariable Long sessionId) {
+    public ResponseEntity<ApiResponse<InterviewSessionResponse>> getSession(@PathVariable Long sessionId) {
         InterviewSessionResponse session = sessionService.getSession(sessionId, getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
@@ -236,7 +236,7 @@ public class InterviewSessionController {
     @Operation(summary = "List all questions and scores for a session")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session questions",
         content = @Content(array = @ArraySchema(schema = @Schema(implementation = SessionQuestionResponse.class))))
-    public ResponseEntity<ApiResponse> getSessionQuestions(@PathVariable Long sessionId) {
+    public ResponseEntity<ApiResponse<List<SessionQuestionResponse>>> getSessionQuestions(@PathVariable Long sessionId) {
         List<SessionQuestionResponse> questions =
                 sessionQuestionService.getSessionQuestions(sessionId, getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
@@ -255,7 +255,7 @@ public class InterviewSessionController {
     @Operation(summary = "Get a specific session question")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Session question",
         content = @Content(schema = @Schema(implementation = SessionQuestionResponse.class)))
-    public ResponseEntity<ApiResponse> getSessionQuestion(
+    public ResponseEntity<ApiResponse<SessionQuestionResponse>> getSessionQuestion(
             @PathVariable Long sessionId,
             @PathVariable Long questionId) {
 
