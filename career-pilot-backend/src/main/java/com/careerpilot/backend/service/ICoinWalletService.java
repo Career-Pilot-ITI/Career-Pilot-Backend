@@ -8,9 +8,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface ICoinWalletService {
-    CoinWallet createWalletForUser(User user);
-    int getBalance(Long userId);
-    void credit(Long userId, int amount, CoinLedgerReason reason, String referenceId);
-    void debit(Long userId, int amount, CoinLedgerReason reason, String referenceId);
-    Page<CoinLedgerEntry> getLedgerHistory(Long userId, Pageable pageable);
+  CoinWallet createWalletForUser(User user);
+
+  int getBalance(Long userId);
+
+  boolean tryDebit(Long userId, int amount, CoinLedgerReason reason, Object ctx);
+
+  void credit(Long userId, int amount, CoinLedgerReason reason, String referenceId);
+
+  void debit(Long userId, int amount, CoinLedgerReason reason, String referenceId);
+
+  Page<CoinLedgerEntry> getLedgerHistory(Long userId, Pageable pageable);
 }
