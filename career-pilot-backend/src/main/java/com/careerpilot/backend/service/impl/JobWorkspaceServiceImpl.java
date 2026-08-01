@@ -87,6 +87,9 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
             "Couldn't fetch this job automatically. Try pasting the job description text instead ");
       }
       job = JobListing.fromChocoData(response, user, request.getUrl());
+      if (response.description() != null && !response.description().isBlank()) {
+        enrichWithParsedSkills(userId, job, response.description());
+      }
       job = jobListingRepository.save(job);
     }
     JobWorkspace workspace = JobWorkspace.builder()
@@ -145,6 +148,19 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
     String fallbackText = rawText != null && rawText.length() > 2000 ? rawText.substring(0, 2000) : rawText;
     return new JobDraft(null, null, null, fallbackText, null, null, List.of(), List.of(), List.of(),
         null, null, null, null, null);
+  }
+
+  private void enrichWithParsedSkills(Long userId, JobListing job, String description) {
+    JobDraft draft = parseWithEntitlement(userId, description);
+    if (draft.requiredSkills() != null && !draft.requiredSkills().isEmpty()) {
+      job.setRequiredSkills(draft.requiredSkills());
+    }
+    if (draft.preferredSkills() != null && !draft.preferredSkills().isEmpty()) {
+      job.setPreferredSkills(draft.preferredSkills());
+    }
+    if (draft.technologies() != null && !draft.technologies().isEmpty()) {
+      job.setTechnologies(draft.technologies());
+    }
   }
 
 }
