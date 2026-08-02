@@ -17,6 +17,7 @@ import com.careerpilot.backend.controller.advice.AuthException.OtpLockoutExcepti
 import com.careerpilot.backend.controller.advice.AuthException.OtpResendLimitException;
 import com.careerpilot.backend.service.IOtpService;
 import com.careerpilot.backend.utils.WireWebService;
+import com.careerpilot.backend.utils.PhoneUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -51,6 +52,7 @@ public class OtpService implements IOtpService {
 
   @Override
   public void sendPhoneOtp(String phoneNumber) throws OtpCooldownException {
+    phoneNumber = PhoneUtil.normalise(phoneNumber);
     if (redisTemplate.hasKey(LOCKOUT_PREFIX + phoneNumber)) {
       throw new OtpLockoutException("Too many failed attempts. Try again later.");
     }
@@ -94,6 +96,7 @@ public class OtpService implements IOtpService {
 
   @Override
   public String verifyPhoneOtp(String phoneNumber, String code) {
+    phoneNumber = PhoneUtil.normalise(phoneNumber);
     if (redisTemplate.hasKey(LOCKOUT_PREFIX + phoneNumber)) {
       throw new OtpLockoutException("Too many failed attempts. Try again later.");
     }
@@ -148,4 +151,5 @@ public class OtpService implements IOtpService {
     redisTemplate.delete(RESEND_PREFIX + phoneNumber);
     return phoneNumber;
   }
+
 }

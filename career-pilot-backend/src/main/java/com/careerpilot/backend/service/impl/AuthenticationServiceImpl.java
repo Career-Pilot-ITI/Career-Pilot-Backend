@@ -22,6 +22,7 @@ import com.careerpilot.backend.service.IAuthentication;
 import com.careerpilot.backend.service.IOtpService;
 import com.careerpilot.backend.service.IUserProfileService;
 import com.careerpilot.backend.utils.IEmailService;
+import com.careerpilot.backend.utils.PhoneUtil;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -68,20 +69,30 @@ public class AuthenticationServiceImpl implements IAuthentication {
 
   @Override
   public void sendOtp(String phoneNumber) {
-    otpService.sendPhoneOtp(phoneNumber);
+    otpService.sendPhoneOtp(PhoneUtil.normalise(phoneNumber));
   }
 
   @Override
   public OtpAuthResponse loginWithOtp(String phoneNumber, String code) {
+    phoneNumber = PhoneUtil.normalise(phoneNumber);
     otpService.verifyPhoneOtp(phoneNumber, code);
 
     boolean isNewUser = false;
     User user = iUserRepository.findByPhoneNumber(phoneNumber).orElse(null);
+
+    if (user == null) {
+      // Also check by the derived username in case the number was registered via another flow
+      String derivedUsername = "user_" + phoneNumber.replaceAll("[^0-9]", "");
+      user = iUserRepository.findByUsername(derivedUsername).orElse(null);
+    }
+
     if (user == null) {
       isNewUser = true;
+      String derivedUsername = "user_" + phoneNumber.replaceAll("[^0-9]", "");
+
       user = new User();
       user.setPhoneNumber(phoneNumber);
-      user.setUsername("user_" + phoneNumber.replaceAll("[^0-9]", ""));
+      user.setUsername(derivedUsername);
       user.setEnabled(true);
       user.setCreatedAt(LocalDateTime.now());
 
