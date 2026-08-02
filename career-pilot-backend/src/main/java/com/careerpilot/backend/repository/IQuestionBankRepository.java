@@ -4,6 +4,7 @@ import com.careerpilot.backend.entity.QuestionBank;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +24,9 @@ public interface IQuestionBankRepository extends JpaRepository<QuestionBank, Lon
 
     List<QuestionBank> findByIsActiveTrue();
     Page<QuestionBank> findByIsActiveTrue(Pageable pageable);
+
+    @Query("SELECT q FROM QuestionBank q JOIN FETCH q.track WHERE q.isActive = TRUE")
+    List<QuestionBank> findAllActiveWithTrack();
 
     List<QuestionBank> findByTrackIdAndDifficultyLevel(Long trackId, String difficultyLevel);
     Page<QuestionBank> findByTrackIdAndDifficultyLevel(Long trackId, String difficultyLevel, Pageable pageable);

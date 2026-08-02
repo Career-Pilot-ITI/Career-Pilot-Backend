@@ -3,6 +3,7 @@ package com.careerpilot.backend.service.impl;
 import com.careerpilot.backend.dto.request.CreateQuestionRequest;
 import com.careerpilot.backend.dto.request.UpdateQuestionRequest;
 import com.careerpilot.backend.dto.response.QuestionResponse;
+import com.careerpilot.backend.embedding.EmbeddingIndexService;
 import com.careerpilot.backend.entity.ENUMs.DifficultyLevel;
 import com.careerpilot.backend.entity.ENUMs.QuestionCategory;
 import com.careerpilot.backend.entity.QuestionBank;
@@ -29,6 +30,7 @@ public class QuestionBankService implements IQuestionBankService {
 
     private final IQuestionBankRepository questionRepository;
     private final ITrackRepository trackRepository;
+    private final EmbeddingIndexService embeddingIndexService;
 
 
     @Override
@@ -56,6 +58,7 @@ public class QuestionBankService implements IQuestionBankService {
         question.setCreatedAt(LocalDateTime.now());
 
         QuestionBank savedQuestion = questionRepository.save(question);
+        embeddingIndexService.indexQuestion(savedQuestion);
         log.info("Question created with ID: {}", savedQuestion.getId());
 
         return mapToResponse(savedQuestion);
@@ -214,6 +217,11 @@ public class QuestionBankService implements IQuestionBankService {
         question.setUpdatedAt(LocalDateTime.now());
 
         QuestionBank updatedQuestion = questionRepository.save(question);
+        if (Boolean.TRUE.equals(updatedQuestion.getIsActive())) {
+            embeddingIndexService.indexQuestion(updatedQuestion);
+        } else {
+            embeddingIndexService.removeQuestion(updatedQuestion.getId());
+        }
         log.info("Question updated with ID: {}", id);
 
         return mapToResponse(updatedQuestion);
@@ -230,6 +238,11 @@ public class QuestionBankService implements IQuestionBankService {
         question.setUpdatedAt(LocalDateTime.now());
 
         QuestionBank updatedQuestion = questionRepository.save(question);
+        if (Boolean.TRUE.equals(updatedQuestion.getIsActive())) {
+            embeddingIndexService.indexQuestion(updatedQuestion);
+        } else {
+            embeddingIndexService.removeQuestion(updatedQuestion.getId());
+        }
         log.info("Question status toggled for ID: {}", id);
 
         return mapToResponse(updatedQuestion);
@@ -246,6 +259,7 @@ public class QuestionBankService implements IQuestionBankService {
         }
 
         questionRepository.deleteById(id);
+        embeddingIndexService.removeQuestion(id);
         log.info("Question deleted with ID: {}", id);
     }
 

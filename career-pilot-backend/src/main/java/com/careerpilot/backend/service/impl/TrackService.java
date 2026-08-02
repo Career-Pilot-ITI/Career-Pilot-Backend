@@ -3,6 +3,7 @@ package com.careerpilot.backend.service.impl;
 import com.careerpilot.backend.controller.response.TrackResponse;
 import com.careerpilot.backend.dto.request.CreateTrackRequest;
 import com.careerpilot.backend.dto.request.UpdateTrackRequest;
+import com.careerpilot.backend.embedding.EmbeddingIndexService;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.service.ITrackService;
@@ -22,6 +23,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TrackService implements ITrackService {
   private final ITrackRepository trackRepository;
+  private final EmbeddingIndexService embeddingIndexService;
 
   @Override
   @Transactional(readOnly = true)
@@ -58,6 +60,7 @@ public class TrackService implements ITrackService {
     track.setDescription(request.description());
     track.setIsActive(true);
     trackRepository.save(track);
+    embeddingIndexService.indexTrack(track);
     return TrackResponse.from(track);
   }
 
@@ -71,6 +74,11 @@ public class TrackService implements ITrackService {
     if (request.description() != null) track.setDescription(request.description());
     if (request.active() != null) track.setIsActive(request.active());
     trackRepository.save(track);
+    if (Boolean.TRUE.equals(track.getIsActive())) {
+      embeddingIndexService.indexTrack(track);
+    } else {
+      embeddingIndexService.removeTrack(track.getId());
+    }
     return TrackResponse.from(track);
   }
 
@@ -82,6 +90,7 @@ public class TrackService implements ITrackService {
         .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
     track.setIsActive(false);
     trackRepository.save(track);
+    embeddingIndexService.removeTrack(track.getId());
   }
 
   @Override
@@ -92,6 +101,7 @@ public class TrackService implements ITrackService {
         .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
     track.setIsActive(true);
     trackRepository.save(track);
+    embeddingIndexService.indexTrack(track);
   }
 
   @Override
@@ -107,5 +117,6 @@ public class TrackService implements ITrackService {
       throw new RuntimeException("Cannot delete track with existing interview sessions");
     }
     trackRepository.deleteById(id);
+    embeddingIndexService.removeTrack(id);
   }
 }

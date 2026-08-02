@@ -54,6 +54,19 @@ spring:
         options:
           model: ${LLM_MODEL:gemini-3.1-flash-lite}
           temperature: ${LLM_TEMPERATURE:0.4}
+      embedding:
+        enabled: true
+        base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+        api-key: ${LLM_API_KEY:not-set}
+        options:
+          model: ${EMBEDDING_MODEL:nvidia/llama-nemotron-embed-vl-1b-v2:free}
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+        dimensions: 2048
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        schema-validation: false
 
   data:
     redis:
@@ -131,6 +144,8 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   session:
     minutes-per-coin: ${MINUTES_PER_COIN:2}
+  embedding:
+    sweep-on-startup: ${EMBED_SWEEP_ON_STARTUP:false}
   job-parse:
     coin-cost: ${JOB_PARSE_COIN_COST:1}
   ats-score:
