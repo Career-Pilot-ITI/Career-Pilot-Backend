@@ -60,10 +60,11 @@ spring:
         api-key: ${LLM_API_KEY:not-set}
         options:
           model: ${EMBEDDING_MODEL:nvidia/llama-nemotron-embed-vl-1b-v2:free}
+          dimensions: ${EMBEDDING_DIMENSIONS:1536}
     vectorstore:
       pgvector:
         initialize-schema: false
-        dimensions: 2048
+        dimensions: ${EMBEDDING_DIMENSIONS:1536}
         index-type: HNSW
         distance-type: COSINE_DISTANCE
         schema-validation: false
