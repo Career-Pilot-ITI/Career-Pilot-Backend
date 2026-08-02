@@ -83,7 +83,11 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     Track track = resolveTrack(request, userId);
     if (track == null) {
-      throw new RuntimeException("Track not found: " + request.getTrackId());
+      throw new RuntimeException(
+          request.getTrackId() != null
+              ? "Track not found with id: " + request.getTrackId()
+              : "Could not resolve a track from workspace " + request.getWorkspaceId()
+                  + " – no active tracks are available or no match was found.");
     }
 
     User user = userRepository.findById(userId)
@@ -460,21 +464,25 @@ public class InterviewSessionService implements IInterviewSessionService {
   }
 
   private Track resolveTrack(StartSessionRequest request, Long userId) {
+    // 1. Explicit trackId takes priority
     if (request.getTrackId() != null) {
       return trackRepository.findById(request.getTrackId()).orElse(null);
     }
+
+    // 2. Try to match via embedding using the workspace job
     JobListing job = resolveWorkspaceJob(request.getWorkspaceId(), userId);
     if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
-      String str = job.getTitle() +"\n"
-        + job.getDescription() ;
-      Track matched = embeddingIndexService.matchTrack(str, job.getTitle()).orElse(null);
+      String query = job.getTitle() + "\n" + (job.getDescription() != null ? job.getDescription() : "");
+      Track matched = embeddingIndexService.matchTrack(query, job.getTitle()).orElse(null);
       if (matched != null) {
         log.info("Auto-matched job '{}' to track '{}'", job.getTitle(), matched.getName());
         return matched;
       }
+      log.warn("No embedding match for job '{}' – falling back to first active track", job.getTitle());
     }
 
-    return null;
+    // 3. Last resort: pick the first active track available
+    return trackRepository.findByIsActiveTrue().stream().findFirst().orElse(null);
   }
 
   private void bindWorkspaceToSession(Long workspaceId, Long userId, InterviewSession session) {
