@@ -29,8 +29,11 @@ import com.careerpilot.backend.service.IInterviewSessionService;
 import com.careerpilot.backend.service.IQuestionScoreService;
 import com.careerpilot.backend.service.ISessionQuotaService;
 import com.careerpilot.backend.service.IUserSkillService;
+import com.careerpilot.backend.service.agent.AgentResponse;
 import com.careerpilot.backend.service.agent.InterviewAgentService;
+import com.careerpilot.backend.embedding.EmbeddingIndexService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +63,7 @@ public class InterviewSessionService implements IInterviewSessionService {
   private final InterviewAgentService interviewAgentService;
   private final ISessionQuotaService sessionQuotaService;
   private final ObjectMapper objectMapper;
+  private final EmbeddingIndexService embeddingIndexService;
 
   @Value("${app.session.minutes-per-coin:2}")
   private int minutesPerCoin;
@@ -155,7 +159,8 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     List<SubmitAnswerRequest.WordTimingDto> words = request.getWords();
     long durationMs = request.getDurationMs() != null ? request.getDurationMs() : 0L;
-    // Use -1 as sentinel: no timing data → QuestionScoreService returns neutral pacing (50)
+    // Use -1 as sentinel: no timing data → QuestionScoreService returns neutral
+    // pacing (50)
     double speechRateWpm = -1, avgPauseMs = 0, silenceRatio = 0;
 
     boolean hasWords = words != null && !words.isEmpty();
@@ -211,7 +216,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     }
     boolean capReached = answeredCount >= maxQs;
 
-    com.careerpilot.backend.service.agent.AgentResponse agentResponse = null;
+    AgentResponse agentResponse = null;
     try {
       List<SessionQuestion> history = sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
 
@@ -363,9 +368,11 @@ public class InterviewSessionService implements IInterviewSessionService {
   // =====================================================================
 
   private int computePacingScore(Double wpm) {
-    if (wpm == null || wpm <= 0) return 50;
+    if (wpm == null || wpm <= 0)
+      return 50;
     int OPTIMAL_LOW = 110, OPTIMAL_HIGH = 160;
-    if (wpm >= OPTIMAL_LOW && wpm <= OPTIMAL_HIGH) return 100;
+    if (wpm >= OPTIMAL_LOW && wpm <= OPTIMAL_HIGH)
+      return 100;
     if (wpm < OPTIMAL_LOW) {
       return (int) Math.max(0, 100.0 * (wpm - 30) / (OPTIMAL_LOW - 30));
     }
@@ -445,40 +452,34 @@ public class InterviewSessionService implements IInterviewSessionService {
   }
 
   private JobListing resolveWorkspaceJob(Long workspaceId, Long userId) {
-    if (workspaceId == null) return null;
+    if (workspaceId == null)
+      return null;
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
         .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
     return workspace.getJob();
   }
 
-
   private Track resolveTrack(StartSessionRequest request, Long userId) {
+    if (request.getTrackId() != null) {
+      return trackRepository.findById(request.getTrackId()).orElse(null);
+    }
     JobListing job = resolveWorkspaceJob(request.getWorkspaceId(), userId);
     if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
-      Track matched = matchTrackByTitle(job.getTitle());
+      String str = job.getTitle() +"\n"
+        + job.getDescription() ;
+      Track matched = embeddingIndexService.matchTrack(str,job.getTitle());
       if (matched != null) {
         log.info("Auto-matched job '{}' to track '{}'", job.getTitle(), matched.getName());
         return matched;
       }
     }
-    if (request.getTrackId() != null) {
-      return trackRepository.findById(request.getTrackId()).orElse(null);
-    }
+
     return null;
   }
 
-  private Track matchTrackByTitle(String jobTitle) {
-    String title = jobTitle.toLowerCase();
-    return trackRepository.findByIsActiveTrue().stream()
-        .filter(t -> t.getName() != null)
-        .filter(t -> title.contains(t.getName().toLowerCase())
-            || t.getName().toLowerCase().contains(title))
-        .findFirst()
-        .orElse(null);
-  }
-
   private void bindWorkspaceToSession(Long workspaceId, Long userId, InterviewSession session) {
-    if (workspaceId == null) return;
+    if (workspaceId == null)
+      return;
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
         .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
     workspace.setLastInterviewSession(session);
