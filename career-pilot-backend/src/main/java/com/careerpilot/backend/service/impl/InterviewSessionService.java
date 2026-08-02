@@ -467,7 +467,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
       String str = job.getTitle() +"\n"
         + job.getDescription() ;
-      Track matched = embeddingIndexService.matchTrack(str,job.getTitle());
+      Track matched = embeddingIndexService.matchTrack(str, job.getTitle()).orElse(null);
       if (matched != null) {
         log.info("Auto-matched job '{}' to track '{}'", job.getTitle(), matched.getName());
         return matched;
