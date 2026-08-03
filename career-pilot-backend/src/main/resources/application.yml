@@ -58,6 +58,8 @@ spring:
         enabled: true
         base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
         api-key: ${LLM_API_KEY:not-set}
+        track-match-threshold: ${EMBED_TRACK_MATCH_THRESHOLD:0.45}
+        question-match-threshold: ${EMBED_QUESTION_MATCH_THRESHOLD:0.45}
         options:
           model: ${EMBEDDING_MODEL:nvidia/llama-nemotron-embed-vl-1b-v2:free}
           dimensions: ${EMBEDDING_DIMENSIONS:1536}

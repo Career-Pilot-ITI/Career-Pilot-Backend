@@ -3,6 +3,7 @@ package com.careerpilot.backend.service.agent;
 import com.careerpilot.backend.annotation.RateLimit;
 import com.careerpilot.backend.annotation.RedactPii;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
+import com.careerpilot.backend.embedding.EmbeddingIndexService;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.FeedbackReport;
 import com.careerpilot.backend.entity.JobListing;
@@ -18,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -34,14 +36,15 @@ public class InterviewAgentService {
     private final IFeedbackReportRepository feedbackReportRepository;
     private final IRagContextDocumentRepository ragContextDocumentRepository;
     private final InterviewTools interviewTools;
+    private final EmbeddingIndexService embeddingIndexService;
 
     @RateLimit
     @RedactPii
     public GeneratedQuestion generateFirstQuestion(
-            Long userId, String trackName, String trackDescription, JobListing job
+            Long userId, Long trackId, String trackName, String trackDescription, JobListing job
     ) {
         String cvContext = buildCvContext(userId);
-        String questionBankContext = buildQuestionBankContext(trackName);
+        String questionBankContext = buildQuestionBankContext(trackId, buildFirstQuestionQuery(trackName, trackDescription, job));
         String jobContext = buildJobContext(job);
 
         String prompt = """
@@ -123,7 +126,7 @@ public class InterviewAgentService {
     public AgentResponse processTurn(
             Long userId, Long sessionId,
             String transcript, String currentQuestionText, Long currentQuestionBankId,
-            String trackName, String trackDescription,
+            Long trackId, String trackName, String trackDescription,
             JobListing job,
             List<SessionQuestion> history,
             int questionsAsked, int maxQuestions,
@@ -131,7 +134,7 @@ public class InterviewAgentService {
     ) {
         String cvContext = buildCvContext(userId);
         String pastPerformance = buildUserHistoryContext(userId);
-        String questionBankContext = buildQuestionBankContext(trackName);
+        String questionBankContext = buildQuestionBankContext(trackId, currentQuestionText + "\n" + (transcript != null ? transcript : ""));
         String historyText = buildHistoryText(history);
         String idealAnswerKeywords = buildIdealAnswerKeywords(currentQuestionBankId);
         String jobContext = buildJobContext(job);
@@ -313,14 +316,16 @@ public class InterviewAgentService {
         return sb.toString();
     }
 
-    private String buildQuestionBankContext(String trackName) {
-        List<QuestionBank> questions = questionBankRepository.findAll().stream()
-                .filter(q -> q.getTrack() != null && trackName != null
-                        && q.getTrack().getName().toLowerCase().contains(trackName.toLowerCase()))
-                .limit(10)
-                .toList();
+    private String buildQuestionBankContext(Long trackId, String query) {
+        List<QuestionBank> questions = embeddingIndexService.matchQuestions(query, 8);
+        if (questions.isEmpty() && trackId != null) {
+            // Last-resort safety net: a bounded page of this track's questions.
+            questions = questionBankRepository
+                    .findByTrackIdAndIsActiveTrue(trackId, PageRequest.of(0, 8))
+                    .getContent();
+        }
         if (questions.isEmpty()) return "No question bank entries for this track.";
-        StringBuilder sb = new StringBuilder("Available sample questions:\n");
+        StringBuilder sb = new StringBuilder("Available sample questions (most relevant first):\n");
         for (QuestionBank q : questions) {
             sb.append("- [").append(q.getDifficultyLevel()).append("] ")
                     .append(q.getQuestionText()).append("\n");
@@ -328,6 +333,17 @@ public class InterviewAgentService {
                 sb.append("  Keywords: ").append(q.getExpectedKeywords()).append("\n");
             }
             sb.append("  Category: ").append(q.getCategory()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String buildFirstQuestionQuery(String trackName, String trackDescription, JobListing job) {
+        StringBuilder sb = new StringBuilder(trackName);
+        if (trackDescription != null && !trackDescription.isBlank()) {
+            sb.append("\n").append(trackDescription);
+        }
+        if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
+            sb.append("\n").append(job.getTitle());
         }
         return sb.toString();
     }

@@ -106,7 +106,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     log.info("Created session ID: {} for user: {}", session.getId(), userId);
 
     com.careerpilot.backend.dto.response.GeneratedQuestion firstQuestion = interviewAgentService.generateFirstQuestion(
-        userId, track.getName(), track.getDescription(), resolveWorkspaceJob(request.getWorkspaceId(), userId));
+        userId, track.getId(), track.getName(), track.getDescription(), resolveWorkspaceJob(request.getWorkspaceId(), userId));
     if (firstQuestion == null || firstQuestion.text() == null) {
       log.warn("Agent failed to generate first question, using fallback for track: {}", track.getName());
       firstQuestion = new com.careerpilot.backend.dto.response.GeneratedQuestion(
@@ -229,6 +229,7 @@ public class InterviewSessionService implements IInterviewSessionService {
           request.getTranscript(),
           current.getQuestionText(),
           current.getQuestion() != null ? current.getQuestion().getId() : null,
+          session.getTrack().getId(),
           session.getTrack().getName(),
           session.getTrack().getDescription(),
           findWorkspaceJob(sessionId),

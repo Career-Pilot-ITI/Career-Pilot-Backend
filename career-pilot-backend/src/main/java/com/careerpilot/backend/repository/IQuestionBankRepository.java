@@ -75,4 +75,5 @@ public interface IQuestionBankRepository extends JpaRepository<QuestionBank, Lon
 
     // Used by InterviewSessionService to pick active questions when starting a session
     List<QuestionBank> findByTrackIdAndIsActiveTrue(Long trackId);
+    Page<QuestionBank> findByTrackIdAndIsActiveTrue(Long trackId, Pageable pageable);
 }
