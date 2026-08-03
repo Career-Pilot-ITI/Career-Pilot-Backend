@@ -18,14 +18,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -104,7 +100,7 @@ public class EmbeddingIndexService {
 
   public Optional<Track> matchTrack(String jobText, String fallbackTitle) {
     if (vectorState.countByType(VectorState.OBJECT_TYPE_TRACK) == 0) {
-      return matchTrackLexical(fallbackTitle, jobText);
+      return matchTrackLexical(fallbackTitle);
     }
 
     List<Document> results = vectorStore.similaritySearch(
@@ -120,13 +116,13 @@ public class EmbeddingIndexService {
 
     if (results == null || results.isEmpty()) {
       log.warn("No embedding match for job '{}' – falling back to lexical track match", fallbackTitle);
-      return matchTrackLexical(fallbackTitle, jobText);
+      return matchTrackLexical(fallbackTitle);
     }
 
     Object rawId = results.get(0).getMetadata().get("objectId");
     if (!(rawId instanceof Number number)) {
       log.warn("Unexpected objectId metadata type: {}", rawId);
-      return matchTrackLexical(fallbackTitle, jobText);
+      return matchTrackLexical(fallbackTitle);
     }
 
     return trackRepository.findById(number.longValue());
@@ -262,76 +258,22 @@ public class EmbeddingIndexService {
         && !NOT_SET.equals(embeddingApiKey);
   }
 
-  private Optional<Track> matchTrackLexical(String jobTitle, String jobContext) {
+  private Optional<Track> matchTrackLexical(String jobTitle) {
     if (jobTitle == null || jobTitle.isBlank()) {
       return Optional.empty();
     }
-    String normalizedTitle = normalize(jobTitle);
-    if (normalizedTitle.isBlank()) {
-      return Optional.empty();
-    }
 
-    List<Track> tracks = trackRepository.findByIsActiveTrue();
-    if (tracks.isEmpty()) {
-      return Optional.empty();
-    }
+    Page<Long> page = trackRepository.searchRelevantIds(
+        jobTitle.trim(),
+        PageRequest.of(0, 1));
 
-    List<String> titleTokens = tokenize(normalizedTitle);
-    // The job description / job text adds context, but stays secondary to the
-    // title.
-    List<String> contextTokens = jobContext != null && !jobContext.isBlank()
-        ? tokenize(normalize(jobContext))
-        : List.of();
-
-    // Inverse-document-frequency weighting: a token is more discriminating
-    // when it appears in fewer tracks (e.g. "android" > "engineer").
-    Map<String, Long> tokenDocFreq = new HashMap<>();
-    for (Track track : tracks) {
-      Set<String> toks = new HashSet<>(tokenize(normalize(track.getName())));
-      toks.addAll(tokenize(normalize(track.getDescription())));
-      for (String tok : toks) {
-        tokenDocFreq.merge(tok, 1L, Long::sum);
-      }
-    }
-
-    Track best = null;
-    double bestScore = 0;
-    for (Track track : tracks) {
-      String nameNorm = normalize(track.getName());
-      if (nameNorm.isBlank()) {
-        continue;
-      }
-      String descNorm = normalize(track.getDescription());
-      Set<String> nameTokens = new HashSet<>(tokenize(nameNorm));
-      Set<String> descTokens = new HashSet<>(tokenize(descNorm));
-
-      double score = 0;
-      // Exact phrase containment of the track name in the job title wins immediately.
-      if (normalizedTitle.contains(nameNorm)) {
-        score += 100;
-      }
-      for (String tok : titleTokens) {
-        score += overlapWeight(tok, nameTokens, descTokens, tokenDocFreq);
-      }
-      // Description-backed context contributes less so it can't hijack a title match.
-      for (String tok : contextTokens) {
-        if (nameTokens.contains(tok)) {
-          score += overlapWeight(tok, nameTokens, descTokens, tokenDocFreq);
-        } else if (descTokens.contains(tok)) {
-          score += 0.5 * overlapWeight(tok, nameTokens, descTokens, tokenDocFreq);
-        }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        best = track;
-      }
-    }
-
-    if (bestScore <= 0) {
+    List<Long> ids = page.getContent();
+    if (ids.isEmpty()) {
       log.warn("No lexical track match for job title '{}'", jobTitle);
       return Optional.empty();
     }
-    return Optional.of(best);
+
+    return trackRepository.findById(ids.get(0));
   }
 
   private List<QuestionBank> matchQuestionLexical(String query, int topK) {
@@ -357,32 +299,6 @@ public class EmbeddingIndexService {
     return ids.stream()
         .map(questionsById::get)
         .filter(Objects::nonNull)
-        .toList();
-  }
-
-  private double overlapWeight(String token, Set<String> nameTokens, Set<String> descTokens,
-      Map<String, Long> tokenDocFreq) {
-    long df = tokenDocFreq.getOrDefault(token, 0L);
-    double weight = 1.0 / (1 + Math.log(df == 0 ? 1 : df));
-    if (nameTokens.contains(token)) {
-      return 4 * weight;
-    }
-    return descTokens.contains(token) ? 1.5 * weight : 0;
-  }
-
-  private String normalize(String text) {
-    if (text == null) {
-      return "";
-    }
-    return text.toLowerCase().replaceAll("[^a-z0-9]+", " ").trim();
-  }
-
-  private List<String> tokenize(String text) {
-    if (text == null || text.isBlank()) {
-      return List.of();
-    }
-    return Arrays.stream(text.split("\\s+"))
-        .filter(t -> !t.isBlank())
         .toList();
   }
 }
