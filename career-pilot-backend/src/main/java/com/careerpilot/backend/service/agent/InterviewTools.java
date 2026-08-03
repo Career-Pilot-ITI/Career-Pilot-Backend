@@ -12,7 +12,11 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -72,20 +76,24 @@ public class InterviewTools {
     @Tool(description = "Search the question bank for sample questions matching a topic or skill. " +
             "Returns a formatted list of questions with their difficulty and keywords.")
     public String searchQuestionBank(String trackName, String topic) {
-        List<QuestionBank> allQuestions = questionBankRepository.findAll();
+        List<QuestionBank> allQuestions = questionBankRepository.findByIsActiveTrue();
+        List<String> topicTokens = tokenize(topic);
+        List<String> trackTokens = tokenize(trackName);
         String lowerTopic = topic != null ? topic.toLowerCase() : "";
         String lowerTrack = trackName != null ? trackName.toLowerCase() : "";
 
+        Map<Long, Double> scores = new HashMap<>();
+        for (QuestionBank q : allQuestions) {
+            if (q.getTrack() == null) {
+                continue;
+            }
+            scores.put(q.getId(), scoreQuestion(q, topicTokens, trackTokens, lowerTopic, lowerTrack));
+        }
+
         List<QuestionBank> matches = allQuestions.stream()
                 .filter(q -> q.getTrack() != null)
-                .filter(q -> {
-                    String name = q.getTrack().getName() != null ? q.getTrack().getName().toLowerCase() : "";
-                    String cat = q.getCategory() != null ? q.getCategory().name().toLowerCase() : "";
-                    String text = q.getQuestionText() != null ? q.getQuestionText().toLowerCase() : "";
-                    String kw = q.getExpectedKeywords() != null ? q.getExpectedKeywords().toLowerCase() : "";
-                    return name.contains(lowerTrack) || cat.contains(lowerTopic)
-                            || text.contains(lowerTopic) || kw.contains(lowerTopic);
-                })
+                .filter(q -> scores.getOrDefault(q.getId(), 0.0) > 0)
+                .sorted(Comparator.comparingDouble((QuestionBank q) -> scores.getOrDefault(q.getId(), 0.0)).reversed())
                 .limit(8)
                 .collect(Collectors.toList());
 
@@ -93,7 +101,7 @@ public class InterviewTools {
             return "No matching questions found in the question bank for topic: " + topic;
         }
 
-        StringBuilder sb = new StringBuilder("Question bank matches:\n");
+        StringBuilder sb = new StringBuilder("Question bank matches (best match first):\n");
         for (QuestionBank q : matches) {
             sb.append("- [").append(q.getDifficultyLevel()).append("] ")
                     .append(q.getQuestionText()).append("\n");
@@ -103,6 +111,44 @@ public class InterviewTools {
             sb.append("  Category: ").append(q.getCategory()).append("\n\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * Lexical relevance score: exact topic phrase hits in text/keywords/category
+     * score highest, then per-token hits weighted by where they occur
+     * (keywords > text > category), plus a small boost when the question's track
+     * matches the requested track.
+     */
+    private double scoreQuestion(QuestionBank q, List<String> topicTokens, List<String> trackTokens,
+                                 String lowerTopic, String lowerTrack) {
+        String text = q.getQuestionText() != null ? q.getQuestionText().toLowerCase() : "";
+        String kw = q.getExpectedKeywords() != null ? q.getExpectedKeywords().toLowerCase() : "";
+        String cat = q.getCategory() != null ? q.getCategory().name().toLowerCase() : "";
+        String tname = q.getTrack().getName() != null ? q.getTrack().getName().toLowerCase() : "";
+
+        double score = 0;
+        if (!lowerTopic.isBlank() && text.contains(lowerTopic)) score += 6;
+        if (!lowerTopic.isBlank() && kw.contains(lowerTopic)) score += 5;
+        if (!lowerTopic.isBlank() && cat.contains(lowerTopic)) score += 4;
+
+        for (String tok : topicTokens) {
+            if (text.contains(tok)) score += 2;
+            if (kw.contains(tok)) score += 3;
+            if (cat.contains(tok)) score += 2;
+        }
+        for (String tok : trackTokens) {
+            if (!tok.isBlank() && tname.contains(tok)) score += 1.5;
+        }
+        return score;
+    }
+
+    private List<String> tokenize(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(text.toLowerCase().split("[^a-z0-9]+"))
+                .filter(t -> !t.isBlank())
+                .collect(Collectors.toList());
     }
 
     @Tool(description = "Search the web for current interview questions, industry trends, or best practices on any topic. " +

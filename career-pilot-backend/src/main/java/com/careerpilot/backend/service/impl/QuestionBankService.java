@@ -175,7 +175,7 @@ public class QuestionBankService implements IQuestionBankService {
     public List<QuestionResponse> searchQuestions(String text) {
         log.info("Searching questions with text: {}", text);
 
-        return questionRepository.findByQuestionTextContainingIgnoreCase(text).stream()
+        return questionRepository.searchByRelevance(text, 20).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -185,7 +185,7 @@ public class QuestionBankService implements IQuestionBankService {
     public Page<QuestionResponse> searchQuestions(String text, Pageable pageable) {
         log.info("Searching questions with text: {} with pagination", text);
 
-        return questionRepository.findByQuestionTextContainingIgnoreCase(text, pageable)
+        return questionRepository.searchByRelevance(text, pageable)
                 .map(this::mapToResponse);
     }
 

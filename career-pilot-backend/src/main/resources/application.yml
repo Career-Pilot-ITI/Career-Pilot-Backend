@@ -146,7 +146,7 @@ app:
   session:
     minutes-per-coin: ${MINUTES_PER_COIN:2}
   embedding:
-    sweep-on-startup: ${EMBED_SWEEP_ON_STARTUP:false}
+    sweep-on-startup: ${EMBED_SWEEP_ON_STARTUP:true}
   job-parse:
     coin-cost: ${JOB_PARSE_COIN_COST:1}
   ats-score:

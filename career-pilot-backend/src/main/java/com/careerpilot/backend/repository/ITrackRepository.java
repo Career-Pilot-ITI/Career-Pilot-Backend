@@ -12,4 +12,5 @@ public interface ITrackRepository extends JpaRepository<Track, Long> {
     Optional<Track> findByName(String name);
     boolean existsByName(String name);
     List<Track> findByIsActiveTrue();
+    long countByIsActiveTrue();
 }

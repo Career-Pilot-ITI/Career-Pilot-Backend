@@ -10,16 +10,18 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
-import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Comparator;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -54,7 +56,11 @@ public class EmbeddingIndexService {
 
   /**
    * Asynchronously rebuilds the entire vector index.
-   * No-op when the index is already populated.
+   * No-op when the index is already complete.
+   *
+   * <p>Resumable by design: rows are upserted by stable id and stale docs removed,
+   * so an interrupted run is simply continued on the next boot instead of leaving
+   * the store partially wiped.</p>
    */
   @Async
   public void reindexAll() {
@@ -63,11 +69,19 @@ public class EmbeddingIndexService {
       return;
     }
     if (isIndexPopulated()) {
-      log.info("Vector store already populated – skipping reindex");
+      log.info("Vector store already complete – skipping reindex");
       return;
     }
-    reindexTracks();
-    reindexQuestions();
+    if (!vectorState.tryAcquireReindexLock()) {
+      log.info("Reindex already running on another instance – skipping");
+      return;
+    }
+    try {
+      reindexTracks();
+      reindexQuestions();
+    } finally {
+      vectorState.releaseReindexLock();
+    }
   }
 
   public void indexTrack(Track track) {
@@ -80,7 +94,7 @@ public class EmbeddingIndexService {
 
   public Optional<Track> matchTrack(String jobText, String fallbackTitle) {
     if (vectorState.countByType(VectorState.OBJECT_TYPE_TRACK) == 0) {
-      return matchTrackByTitle(fallbackTitle);
+      return matchTrackLexical(fallbackTitle);
     }
 
     List<Document> results = vectorStore.similaritySearch(
@@ -95,13 +109,14 @@ public class EmbeddingIndexService {
             .build());
 
     if (results == null || results.isEmpty()) {
-      return Optional.empty();
+      log.warn("No embedding match for job '{}' – falling back to lexical track match", fallbackTitle);
+      return matchTrackLexical(fallbackTitle);
     }
 
     Object rawId = results.get(0).getMetadata().get("objectId");
     if (!(rawId instanceof Number number)) {
       log.warn("Unexpected objectId metadata type: {}", rawId);
-      return Optional.empty();
+      return matchTrackLexical(fallbackTitle);
     }
 
     return trackRepository.findById(number.longValue());
@@ -116,23 +131,17 @@ public class EmbeddingIndexService {
   }
 
   private void reindexTracks() {
-    vectorStore.delete(new FilterExpressionBuilder()
-        .eq("objectType", VectorState.OBJECT_TYPE_TRACK)
-        .build());
-
     List<Track> tracks = trackRepository.findByIsActiveTrue();
     vectorStore.add(tracks.stream().map(this::trackDocument).toList());
-    log.info("Reindexed {} active tracks", tracks.size());
+    long removed = vectorState.removeStale(VectorState.OBJECT_TYPE_TRACK, "tracks");
+    log.info("Reindexed {} active tracks (stale removed: {})", tracks.size(), removed);
   }
 
   private void reindexQuestions() {
-    vectorStore.delete(new FilterExpressionBuilder()
-        .eq("objectType", VectorState.OBJECT_TYPE_QUESTION)
-        .build());
-
     List<QuestionBank> questions = questionRepository.findAllActiveWithTrack();
     vectorStore.add(questions.stream().map(this::questionDocument).toList());
-    log.info("Reindexed {} active questions", questions.size());
+    long removed = vectorState.removeStale(VectorState.OBJECT_TYPE_QUESTION, "question_bank");
+    log.info("Reindexed {} active questions (stale removed: {})", questions.size(), removed);
   }
 
   private Document trackDocument(Track track) {
@@ -175,8 +184,21 @@ public class EmbeddingIndexService {
   }
 
   private boolean isIndexPopulated() {
-    return vectorState.countByType(VectorState.OBJECT_TYPE_TRACK) > 0
-        && vectorState.countByType(VectorState.OBJECT_TYPE_QUESTION) > 0;
+      long dbTracks    = trackRepository.countByIsActiveTrue();
+      long dbQuestions = questionRepository.countActiveWithTrack();
+
+      long indexedTracks    = vectorState.countByType(VectorState.OBJECT_TYPE_TRACK);
+      long indexedQuestions = vectorState.countByType(VectorState.OBJECT_TYPE_QUESTION);
+
+      // Complete only when counts match exactly: covers missing rows AND stale/duplicate docs.
+      boolean tracksOk    = indexedTracks    == dbTracks;
+      boolean questionsOk = indexedQuestions == dbQuestions;
+
+      if (!tracksOk || !questionsOk) {
+          log.info("Vector store incomplete – tracks: {}/{}, questions: {}/{}",
+                  indexedTracks, dbTracks, indexedQuestions, dbQuestions);
+      }
+      return tracksOk && questionsOk;
   }
 
   private boolean embeddingConfigured() {
@@ -185,17 +207,84 @@ public class EmbeddingIndexService {
         && !NOT_SET.equals(embeddingApiKey);
   }
 
-  private Optional<Track> matchTrackByTitle(String jobTitle) {
+  private Optional<Track> matchTrackLexical(String jobTitle) {
     if (jobTitle == null || jobTitle.isBlank()) {
       return Optional.empty();
     }
-    String title = jobTitle.toLowerCase();
-    return trackRepository.findByIsActiveTrue().stream()
-        .filter(t -> t.getName() != null && !t.getName().isBlank())
-        .filter(t -> {
-          String name = t.getName().toLowerCase();
-          return title.contains(name) || name.contains(title);
-        })
-        .max(Comparator.comparingInt(t -> t.getName().length()));
+    String normalizedTitle = normalize(jobTitle);
+    if (normalizedTitle.isBlank()) {
+      return Optional.empty();
+    }
+
+    List<Track> tracks = trackRepository.findByIsActiveTrue();
+    if (tracks.isEmpty()) {
+      return Optional.empty();
+    }
+
+    List<String> titleTokens = tokenize(normalizedTitle);
+
+    // Inverse-document-frequency weighting: a token is more discriminating
+    // when it appears in fewer tracks (e.g. "android" > "engineer").
+    Map<String, Long> tokenDocFreq = new HashMap<>();
+    for (Track track : tracks) {
+      Set<String> toks = new HashSet<>(tokenize(normalize(track.getName())));
+      toks.addAll(tokenize(normalize(track.getDescription())));
+      for (String tok : toks) {
+        tokenDocFreq.merge(tok, 1L, Long::sum);
+      }
+    }
+
+    Track best = null;
+    double bestScore = 0;
+    for (Track track : tracks) {
+      String nameNorm = normalize(track.getName());
+      if (nameNorm.isBlank()) {
+        continue;
+      }
+      String descNorm = normalize(track.getDescription());
+      Set<String> nameTokens = new HashSet<>(tokenize(nameNorm));
+      Set<String> descTokens = new HashSet<>(tokenize(descNorm));
+
+      double score = 0;
+      // Exact phrase containment of the track name in the job title wins immediately.
+      if (normalizedTitle.contains(nameNorm)) {
+        score += 100;
+      }
+      for (String tok : titleTokens) {
+        long df = tokenDocFreq.getOrDefault(tok, 0L);
+        double weight = 1.0 / (1 + Math.log(df == 0 ? 1 : df));
+        if (nameTokens.contains(tok)) {
+          score += 4 * weight;
+        } else if (descTokens.contains(tok)) {
+          score += 1.5 * weight;
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = track;
+      }
+    }
+
+    if (bestScore <= 0) {
+      log.warn("No lexical track match for job title '{}'", jobTitle);
+      return Optional.empty();
+    }
+    return Optional.of(best);
+  }
+
+  private String normalize(String text) {
+    if (text == null) {
+      return "";
+    }
+    return text.toLowerCase().replaceAll("[^a-z0-9]+", " ").trim();
+  }
+
+  private List<String> tokenize(String text) {
+    if (text == null || text.isBlank()) {
+      return List.of();
+    }
+    return Arrays.stream(text.split("\\s+"))
+        .filter(t -> !t.isBlank())
+        .toList();
   }
 }
