@@ -67,7 +67,8 @@ public class CoverLetterAgentService {
 
         String response = chatClient.prompt()
                 .system("You are an expert career coach and cover letter writer. "
-                        + "Match the candidate's strengths to the company's needs. Stay truthful about the candidate and the company.")
+                        + "Match the candidate's strengths to the company's needs. Stay truthful about the candidate and the company. "
+                        + "Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.")
                 .user(prompt)
                 .tools(companyResearchTools)
                 .call()

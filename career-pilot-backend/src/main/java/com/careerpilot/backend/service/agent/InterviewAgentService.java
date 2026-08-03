@@ -86,7 +86,8 @@ public class InterviewAgentService {
         log.info("Agent generating first question for track: {}", trackName);
 
         String response = chatClient.prompt()
-                .system("You are Career Pilot AI — an expert interviewer. Generate a focused, track-specific first question. The question MUST be about the given track. Do NOT mix the candidate's unrelated background into the question topic.")
+                .system("You are Career Pilot AI — an expert interviewer. Generate a focused, track-specific first question. The question MUST be about the given track. Do NOT mix the candidate's unrelated background into the question topic. "
+                        + "Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.")
                 .user(prompt)
                 .tools(interviewTools)
                 .call()
@@ -162,6 +163,9 @@ public class InterviewAgentService {
                 
                 sessionStatus must be "IN_PROGRESS" to continue or "READY_TO_COMPLETE" to end.
                 sourceQuestionId should be the ID of a question bank question if it matches, or null for custom questions.
+                
+                Any [REDACTED:...] placeholder in the input (CV, transcripts, history) is protected PII —
+                preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
                 """;
 
         String userPrompt = """
