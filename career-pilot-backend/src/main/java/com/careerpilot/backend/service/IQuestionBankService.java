@@ -28,7 +28,6 @@ public interface IQuestionBankService {
     List<QuestionResponse> getQuestionsByCategory(String category);
     Page<QuestionResponse> getQuestionsByCategory(String category, Pageable pageable);
 
-    List<QuestionResponse> searchQuestions(String text);
     Page<QuestionResponse> searchQuestions(String text, Pageable pageable);
 
     // Update

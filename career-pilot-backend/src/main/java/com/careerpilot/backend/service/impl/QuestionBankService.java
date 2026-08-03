@@ -14,12 +14,16 @@ import com.careerpilot.backend.service.IQuestionBankService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -172,21 +176,27 @@ public class QuestionBankService implements IQuestionBankService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<QuestionResponse> searchQuestions(String text) {
-        log.info("Searching questions with text: {}", text);
-
-        return questionRepository.searchByRelevance(text, 20).stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public Page<QuestionResponse> searchQuestions(String text, Pageable pageable) {
         log.info("Searching questions with text: {} with pagination", text);
 
-        return questionRepository.searchByRelevance(text, pageable)
-                .map(this::mapToResponse);
+        Page<Long> ids = questionRepository.searchRelevantIds(text, pageable);
+        List<QuestionResponse> content = questionsInOrder(ids.getContent()).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+        return new PageImpl<>(content, pageable, ids.getTotalElements());
+    }
+
+    /** Loads the ranked ids with their track eagerly joined, preserving rank order. */
+    private List<QuestionBank> questionsInOrder(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, QuestionBank> byId = questionRepository.findActiveByIdsIn(ids).stream()
+                .collect(Collectors.toMap(QuestionBank::getId, Function.identity()));
+        return ids.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     // ========== UPDATE ==========

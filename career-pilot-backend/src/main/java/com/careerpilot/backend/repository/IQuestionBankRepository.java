@@ -42,9 +42,10 @@ public interface IQuestionBankRepository extends JpaRepository<QuestionBank, Lon
     // Relevance search: exact substring ranks first, then pg_trgm word similarity.
     // `word_similarity(a, b)` scores how close the query is to the most similar
     // word set inside the question text / keywords, so multi-word queries and
-    // near-miss spellings still match.
+    // near-miss spellings still match. Returns ranked ids; load entities via
+    // findActiveByIdsIn to keep the lazy track association populated.
     @Query(value = """
-            SELECT qb.* FROM question_bank qb
+            SELECT qb.id FROM question_bank qb
             WHERE qb.is_active = TRUE
               AND (
                 qb.question_text ILIKE '%' || :q || '%'
@@ -66,26 +67,11 @@ public interface IQuestionBankRepository extends JpaRepository<QuestionBank, Lon
                 OR word_similarity(:q, qb.question_text) > 0.2
                 OR word_similarity(:q, qb.expected_keywords) > 0.2
               )
-            """)
-    Page<QuestionBank> searchByRelevance(@Param("q") String q, Pageable pageable);
+            """, nativeQuery = true)
+    Page<Long> searchRelevantIds(@Param("q") String q, Pageable pageable);
 
-    @Query(value = """
-            SELECT qb.* FROM question_bank qb
-            WHERE qb.is_active = TRUE
-              AND (
-                qb.question_text ILIKE '%' || :q || '%'
-                OR qb.expected_keywords ILIKE '%' || :q || '%'
-                OR word_similarity(:q, qb.question_text) > 0.2
-                OR word_similarity(:q, qb.expected_keywords) > 0.2
-              )
-            ORDER BY
-                (CASE WHEN qb.question_text ILIKE '%' || :q || '%' THEN 4 ELSE 0 END)
-              + (CASE WHEN qb.expected_keywords ILIKE '%' || :q || '%' THEN 2 ELSE 0 END)
-              + GREATEST(word_similarity(:q, qb.question_text), word_similarity(:q, qb.expected_keywords))
-              DESC
-            LIMIT :limit
-            """)
-    List<QuestionBank> searchByRelevance(@Param("q") String q, @Param("limit") int limit);
+    @Query("SELECT q FROM QuestionBank q JOIN FETCH q.track WHERE q.isActive = TRUE AND q.id IN :ids")
+    List<QuestionBank> findActiveByIdsIn(@Param("ids") java.util.Collection<Long> ids);
 
     // Used by InterviewSessionService to pick active questions when starting a session
     List<QuestionBank> findByTrackIdAndIsActiveTrue(Long trackId);
