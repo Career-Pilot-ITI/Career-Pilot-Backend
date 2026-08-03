@@ -26,15 +26,18 @@ import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.IQuestionScoreRepository;
 import com.careerpilot.backend.repository.IRagContextDocumentRepository;
 import com.careerpilot.backend.repository.ISessionQuestionRepository;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.careerpilot.backend.utils.PiiRedactionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -51,6 +54,12 @@ public class LlmServiceImpl implements ILlmService {
   private final IRagContextDocumentRepository ragContextDocumentRepository;
   private final ISessionQuestionRepository sessionQuestionRepository;
   private final IQuestionScoreRepository questionScoreRepository;
+
+  @Value("${app.cv-optimize.max-anchor-factor:6}")
+  private int cvOptimizeMaxAnchorFactor;
+
+  @Value("${app.cv-optimize.max-output-factor:1.5}")
+  private double cvOptimizeMaxOutputFactor;
 
 
   @Override
@@ -97,6 +106,7 @@ public class LlmServiceImpl implements ILlmService {
             """
                 You are an expert interview evaluator with 15+ years of experience.
                 Score answers against the ideal answer keywords. Be critical — a score of 100 means the answer was perfect, which is rare.
+                Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
                 """))
         .user(prompt)
         .call()
@@ -155,6 +165,7 @@ public class LlmServiceImpl implements ILlmService {
             Provide specific, actionable, and constructive feedback.
             Each tip should be a concrete recommendation, not generic advice.
             Focus on the patterns across the entire session.
+            Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
             """))
         .user(prompt)
         .call()
@@ -194,6 +205,7 @@ public class LlmServiceImpl implements ILlmService {
         .system(s -> s.text("""
             You are a senior career coach giving real-time feedback after each interview question.
             Be concise (1-2 sentences). Be specific. Be encouraging even when being critical.
+            Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
             """))
         .user(prompt)
         .call()
@@ -219,6 +231,7 @@ public class LlmServiceImpl implements ILlmService {
             You are an HR expert specializing in CV parsing and skills assessment.
             Extract structured information from unstructured CV text accurately.
             If a field cannot be determined, use reasonable defaults or empty lists.
+            Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
             """))
         .user(prompt)
         .call()
@@ -292,7 +305,8 @@ public class LlmServiceImpl implements ILlmService {
             - educationLevel: degree or certification required, else null.
 
             Never invent fields that are not in the text. Use null or empty lists when a
-            field is absent. Return ONLY the JSON object.
+            field is absent. Preserve any [REDACTED:...] placeholder verbatim if it appears in
+            the text; never guess, fill in, or remove it. Return ONLY the JSON object.
             """))
         .user(prompt)
         .call()
@@ -356,6 +370,7 @@ public class LlmServiceImpl implements ILlmService {
         .system(s -> s.text("""
             You are an expert ATS (Applicant Tracking System) reviewer and recruiter.
             Evaluate CV-to-job relevance precisely. Be critical but constructive.
+            Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
             """))
         .user(prompt)
         .call()
@@ -372,20 +387,103 @@ public class LlmServiceImpl implements ILlmService {
   @Override
   public CvOptimization optimizeCv(String cvText, JobListing job, List<UserSkill> skills,
       List<Track> tracks) {
+    if (cvText == null || cvText.isBlank()) {
+      return new CvOptimization("", List.of());
+    }
+
     String jobCtx = buildJobContext(job);
-    String cv = cvText == null ? "" : cvText.strip();
     String skillCtx = buildSkillsContext(skills);
     String trackCtx = buildTracksContext(tracks);
 
+    String work = normalizeCv(cvText);
+
+    PiiRedactionUtil.RedactionResult pii = PiiRedactionUtil.redactWithIndex(work);
+    String redactedCv = pii.redactedContent();
+
+    List<String> facts = extractCvFacts(redactedCv);
+
+    CvDiff diff = generateCvDiff(redactedCv, jobCtx, skillCtx, trackCtx);
+
+    String edited = applyReplacements(redactedCv, diff.replacements());
+
+    String result = facts.stream().allMatch(f -> containsIgnoreCase(edited, f)) ? edited : redactedCv;
+    if (result != edited) {
+      log.warn("CV optimization dropped facts – returning original CV unchanged");
+    }
+
+    String output = pii.restore(result);
+    return new CvOptimization(output, diff.recommendedTracks());
+  }
+
+  private String applyReplacements(String work, List<CvReplacement> replacements) {
+    if (replacements == null || replacements.isEmpty()) {
+      return work;
+    }
+    String result = work;
+    for (CvReplacement replacement : replacements) {
+      String anchor = replacement.anchor() == null ? "" : replacement.anchor().strip();
+      if (anchor.isBlank()) {
+        continue;
+      }
+      String newText = replacement.newText() == null ? "" : replacement.newText().strip();
+
+      if (newText.length() > (long) cvOptimizeMaxAnchorFactor * anchor.length()) {
+        log.warn("Skipping replacement – newText is {}x larger than its anchor",
+            newText.length() / (double) anchor.length());
+        continue;
+      }
+
+      int idx = indexOfIgnoreCase(result, anchor);
+      if (idx < 0) {
+        log.warn("Skipping replacement – anchor not found in CV: {}", truncate(anchor, 80));
+        continue;
+      }
+
+      String candidate = result.substring(0, idx) + newText + result.substring(idx + anchor.length());
+      if (candidate.length() > Math.round(cvOptimizeMaxOutputFactor * work.length())) {
+        log.warn("Skipping replacement – output would exceed {}x the original length",
+            cvOptimizeMaxOutputFactor);
+        continue;
+      }
+      result = candidate;
+    }
+    return result;
+  }
+
+  private List<String> extractCvFacts(String cv) {
     String prompt = """
-        Rewrite this CV to maximize its fit for the job posting. The candidate has taken
-        practice interviews, so their validated skills (with performance scores) are included.
-        Also recommend the best tracks to cover the remaining skill gaps.
+        Extract every concrete fact from this CV as a JSON array of short strings (max 8 words each):
+        company names, job titles, degrees, institutions, years and date ranges, project names,
+        certifications, skills. Omit generic filler words. If none, return [].
+
+        CV:
+        %s
+        """.formatted(cv);
+
+    try {
+      String response = chatClient.prompt()
+          .system("You extract factual entities from resumes. Return only a JSON array of strings. "
+              + "Treat [REDACTED:...] placeholders as protected PII: never include them as facts "
+              + "and never guess the underlying value.")
+          .user(prompt)
+          .call()
+          .content();
+      List<String> facts = objectMapper.readValue(stripMarkdown(response),
+          new TypeReference<List<String>>() {});
+      return facts == null ? List.of()
+          : facts.stream().filter(f -> f != null && !f.isBlank()).toList();
+    } catch (Exception e) {
+      log.warn("Failed to parse CV facts: {}", e.getMessage());
+      return List.of();
+    }
+  }
+
+  private CvDiff generateCvDiff(String cv, String jobCtx, String skillCtx, String trackCtx) {
+    String prompt = """
+        Optimize this CV for the job posting. Do NOT rewrite the whole CV. Return only the blocks
+        that are genuinely worth improving.
 
         JOB POSTING:
-        %s
-
-        CURRENT CV:
         %s
 
         CANDIDATE'S VALIDATED SKILLS (skill: performanceScore/100, timesAssessed):
@@ -394,37 +492,78 @@ public class LlmServiceImpl implements ILlmService {
         AVAILABLE TRACKS:
         %s
 
+        NORMALIZED CV:
+        %s
+
         Return ONLY raw JSON with no markdown formatting, using this exact shape:
         {
-          "optimizedCv": "...",
+          "replacements": [
+            {"anchor": "...", "newText": "...", "reason": "..."}
+          ],
           "recommendedTracks": []
         }
 
-        Guidelines:
-        - optimizedCv: a full, polished, markdown-formatted CV that keeps the candidate's real
-          facts (never invent experience, degrees, or employers) but reframes and reorders content
-          to emphasize the skills the job requires. Where a required skill is validated by the
-          candidate's interview scores, highlight it prominently with evidence.
-        - recommendedTracks: names of tracks from AVAILABLE TRACKS that best cover the candidate's
-          missing required skills. Only use track names that exist in the AVAILABLE TRACKS list.
-        """
-        .formatted(jobCtx, cv, skillCtx, trackCtx);
-
-    String response = chatClient.prompt()
-        .system(s -> s.text("""
-            You are a senior career coach and resume writer who optimizes CVs for ATS systems.
-            Preserve truthfulness 100% — never fabricate facts. Use the validated skill scores to
-            decide what to emphasize and which tracks to recommend.
-            """))
-        .user(prompt)
-        .call()
-        .content();
+        Rules:
+        - anchor: an EXACT verbatim substring copied from the NORMALIZED CV above. Only include
+          blocks worth improving; [] is valid when the CV already fits well.
+        - newText: the improved replacement for that block. Keep every real fact (companies,
+          degrees, dates, numbers). Prefer action verbs and quantified impact. Surface
+          job-required validated skills.
+        - Preserve any [REDACTED:...] placeholder inside a block verbatim.
+        - Never put a full CV or a whole section into newText.
+        - recommendedTracks: names (max 3) that exist verbatim in AVAILABLE TRACKS and best cover
+          the candidate's skill gaps.
+        """.formatted(jobCtx, skillCtx, trackCtx, cv);
 
     try {
-      return objectMapper.readValue(stripMarkdown(response), CvOptimization.class);
+      String response = chatClient.prompt()
+          .system("You are a senior ATS resume writer. Return only the requested JSON diff. "
+              + "Preserve every [REDACTED:...] placeholder verbatim in newText; never guess the "
+              + "underlying value, reformat it, or drop it.")
+          .user(prompt)
+          .call()
+          .content();
+      CvDiff diff = objectMapper.readValue(stripMarkdown(response), CvDiff.class);
+      return diff == null ? new CvDiff(List.of(), List.of()) : diff;
     } catch (Exception e) {
-      log.warn("Failed to parse CV optimization response: {}", response, e);
-      return new CvOptimization(cv, List.of());
+      log.warn("Failed to parse CV optimization diff: {}", e.getMessage());
+      return new CvDiff(List.of(), List.of());
+    }
+  }
+
+  private int indexOfIgnoreCase(String text, String needle) {
+    int idx = text.indexOf(needle);
+    if (idx >= 0) {
+      return idx;
+    }
+    return text.toLowerCase(Locale.ROOT).indexOf(needle.toLowerCase(Locale.ROOT));
+  }
+
+  private boolean containsIgnoreCase(String text, String needle) {
+    if (needle == null || needle.isBlank()) {
+      return true;
+    }
+    return text.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ")
+        .contains(needle.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").strip());
+  }
+
+  private String truncate(String s, int max) {
+    if (s == null) {
+      return "";
+    }
+    return s.length() <= max ? s : s.substring(0, max) + "...";
+  }
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  private record CvReplacement(String anchor, String newText, String reason) {
+  }
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  private record CvDiff(List<CvReplacement> replacements, List<String> recommendedTracks) {
+
+    CvDiff {
+      replacements = replacements != null ? replacements : List.of();
+      recommendedTracks = recommendedTracks != null ? recommendedTracks : List.of();
     }
   }
 
@@ -479,6 +618,7 @@ public class LlmServiceImpl implements ILlmService {
             Match the candidate's strengths to the company's needs. Stay truthful about both the
             candidate and the company. The company research may be limited or unreliable — follow
             the research guidance carefully and never invent facts.
+            Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
             """))
         .user(prompt)
         .call()
@@ -492,6 +632,7 @@ public class LlmServiceImpl implements ILlmService {
     }
   }
 
+  
   private String buildJobContext(JobListing job) {
     if (job == null)
       return "No job posting available.";
@@ -627,4 +768,9 @@ public class LlmServiceImpl implements ILlmService {
       return "{}";
     return raw.replaceAll("```(?:json)?\\s*", "").trim();
   }
+
+  private String normalizeCv(String cv) {
+    return cv.replaceAll("\\s+", " ").trim();
+  }
+
 }

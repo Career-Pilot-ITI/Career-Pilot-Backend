@@ -6,11 +6,14 @@ import com.careerpilot.backend.repository.IQuestionBankRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +23,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Single entry-point for all vector-store operations.
@@ -53,14 +59,18 @@ public class EmbeddingIndexService {
 
   @Value("${spring.ai.openai.embedding.track-match-threshold:0.45}")
   private double trackMatchThreshold;
+  @Value("${spring.ai.openai.embedding.question-match-threshold:0.45}")
+  private double questionMatchThreshold;
 
   /**
    * Asynchronously rebuilds the entire vector index.
    * No-op when the index is already complete.
    *
-   * <p>Resumable by design: rows are upserted by stable id and stale docs removed,
+   * <p>
+   * Resumable by design: rows are upserted by stable id and stale docs removed,
    * so an interrupted run is simply continued on the next boot instead of leaving
-   * the store partially wiped.</p>
+   * the store partially wiped.
+   * </p>
    */
   @Async
   public void reindexAll() {
@@ -130,6 +140,50 @@ public class EmbeddingIndexService {
     vectorStore.delete(List.of(stableId(VectorState.OBJECT_TYPE_QUESTION, id)));
   }
 
+  public List<QuestionBank> matchQuestions(String query, int topK) {
+    if (query == null || query.isBlank() || topK <= 0) {
+      return List.of();
+    }
+    if (vectorState.countByType(VectorState.OBJECT_TYPE_QUESTION) == 0) {
+      return matchQuestionLexical(query, topK);
+    }
+
+    List<Document> results = vectorStore.similaritySearch(
+        SearchRequest.builder()
+            .query(query)
+            .topK(topK)
+            .similarityThreshold(questionMatchThreshold)
+            .filterExpression(new Filter.Expression(
+                Filter.ExpressionType.EQ,
+                new Filter.Key("objectType"),
+                new Filter.Value(VectorState.OBJECT_TYPE_QUESTION)))
+            .build());
+
+    if (results == null || results.isEmpty()) {
+      log.warn("No embedding match for question query '{}' – falling back to lexical question match", query);
+      return matchQuestionLexical(query, topK);
+    }
+
+    List<Long> ids = results.stream()
+        .map(doc -> doc.getMetadata().get("objectId"))
+        .filter(Number.class::isInstance)
+        .map(id -> ((Number) id).longValue())
+        .toList();
+
+    if (ids.isEmpty()) {
+      return matchQuestionLexical(query, topK);
+    }
+
+    Map<Long, QuestionBank> byId = questionRepository.findAllById(ids).stream()
+        .collect(Collectors.toMap(QuestionBank::getId, Function.identity()));
+
+    return ids.stream()
+        .map(byId::get)
+        .filter(Objects::nonNull)
+        .filter(q -> Boolean.TRUE.equals(q.getIsActive()))
+        .toList();
+  }
+
   private void reindexTracks() {
     List<Track> tracks = trackRepository.findByIsActiveTrue();
     vectorStore.add(tracks.stream().map(this::trackDocument).toList());
@@ -184,21 +238,22 @@ public class EmbeddingIndexService {
   }
 
   private boolean isIndexPopulated() {
-      long dbTracks    = trackRepository.countByIsActiveTrue();
-      long dbQuestions = questionRepository.countActiveWithTrack();
+    long dbTracks = trackRepository.countByIsActiveTrue();
+    long dbQuestions = questionRepository.countActiveWithTrack();
 
-      long indexedTracks    = vectorState.countByType(VectorState.OBJECT_TYPE_TRACK);
-      long indexedQuestions = vectorState.countByType(VectorState.OBJECT_TYPE_QUESTION);
+    long indexedTracks = vectorState.countByType(VectorState.OBJECT_TYPE_TRACK);
+    long indexedQuestions = vectorState.countByType(VectorState.OBJECT_TYPE_QUESTION);
 
-      // Complete only when counts match exactly: covers missing rows AND stale/duplicate docs.
-      boolean tracksOk    = indexedTracks    == dbTracks;
-      boolean questionsOk = indexedQuestions == dbQuestions;
+    // Complete only when counts match exactly: covers missing rows AND
+    // stale/duplicate docs.
+    boolean tracksOk = indexedTracks == dbTracks;
+    boolean questionsOk = indexedQuestions == dbQuestions;
 
-      if (!tracksOk || !questionsOk) {
-          log.info("Vector store incomplete – tracks: {}/{}, questions: {}/{}",
-                  indexedTracks, dbTracks, indexedQuestions, dbQuestions);
-      }
-      return tracksOk && questionsOk;
+    if (!tracksOk || !questionsOk) {
+      log.info("Vector store incomplete – tracks: {}/{}, questions: {}/{}",
+          indexedTracks, dbTracks, indexedQuestions, dbQuestions);
+    }
+    return tracksOk && questionsOk;
   }
 
   private boolean embeddingConfigured() {
@@ -222,7 +277,8 @@ public class EmbeddingIndexService {
     }
 
     List<String> titleTokens = tokenize(normalizedTitle);
-    // The job description / job text adds context, but stays secondary to the title.
+    // The job description / job text adds context, but stays secondary to the
+    // title.
     List<String> contextTokens = jobContext != null && !jobContext.isBlank()
         ? tokenize(normalize(jobContext))
         : List.of();
@@ -278,8 +334,34 @@ public class EmbeddingIndexService {
     return Optional.of(best);
   }
 
+  private List<QuestionBank> matchQuestionLexical(String query, int topK) {
+    if (query == null || query.isBlank() || topK <= 0) {
+      return List.of();
+    }
+
+    Page<Long> relevantQuestions = questionRepository.searchRelevantIds(
+        query.trim(),
+        PageRequest.of(0, topK));
+
+    List<Long> ids = relevantQuestions.getContent();
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+
+    Map<Long, QuestionBank> questionsById = questionRepository.findAllById(ids)
+        .stream()
+        .collect(Collectors.toMap(
+            QuestionBank::getId,
+            Function.identity()));
+
+    return ids.stream()
+        .map(questionsById::get)
+        .filter(Objects::nonNull)
+        .toList();
+  }
+
   private double overlapWeight(String token, Set<String> nameTokens, Set<String> descTokens,
-                               Map<String, Long> tokenDocFreq) {
+      Map<String, Long> tokenDocFreq) {
     long df = tokenDocFreq.getOrDefault(token, 0L);
     double weight = 1.0 / (1 + Math.log(df == 0 ? 1 : df));
     if (nameTokens.contains(token)) {

@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.agent;
 
+import com.careerpilot.backend.annotation.RateLimit;
 import com.careerpilot.backend.dto.response.ScoreResponse;
 import com.careerpilot.backend.entity.JobListing;
 import com.careerpilot.backend.entity.QuestionBank;
@@ -33,6 +34,7 @@ public class InterviewTools {
 
     @Tool(description = "Evaluate a candidate's interview answer and return scores as a JSON string. " +
             "Returns: {\"contentRelevance\": 0-100, \"clarity\": 0-100, \"confidence\": 0-100, \"fillerWords\": 0-100, \"reasoning\": \"...\"}")
+    @RateLimit(capacity = 10, refillTokens = 10, refillSeconds = 60)
     public String evaluateAnswer(String questionText, String transcript, String idealAnswerKeywords) {
         String prompt = """
                 Score this interview answer.
@@ -55,7 +57,8 @@ public class InterviewTools {
                 transcript);
 
         String response = chatClient.prompt()
-                .system("You are an expert interview evaluator. Be critical and specific.")
+                .system("You are an expert interview evaluator. Be critical and specific. "
+                        + "Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.")
                 .user(prompt)
                 .call()
                 .content();
@@ -75,6 +78,7 @@ public class InterviewTools {
 
     @Tool(description = "Search the question bank for sample questions matching a topic or skill. " +
             "Returns a formatted list of questions with their difficulty and keywords.")
+    @RateLimit(capacity = 30, refillTokens = 30, refillSeconds = 60)
     public String searchQuestionBank(String trackName, String topic) {
         List<QuestionBank> allQuestions = questionBankRepository.findByIsActiveTrue();
         List<String> topicTokens = tokenize(topic);
@@ -153,6 +157,7 @@ public class InterviewTools {
 
     @Tool(description = "Search the web for current interview questions, industry trends, or best practices on any topic. " +
             "Use this to find fresh, up-to-date questions that reflect current industry standards.")
+    @RateLimit(capacity = 10, refillTokens = 10, refillSeconds = 60)
     public String searchWeb(String query) {
         return webSearchService.search(query);
     }
@@ -172,6 +177,7 @@ public class InterviewTools {
     @Tool(description = "Retrieve the full job posting (description, responsibilities, qualifications) for a saved job " +
             "by its job ID. Use this to probe a specific requirement of the role being interviewed for. " +
             "Returns a formatted job posting or an error if the job id is unknown.")
+    @RateLimit(capacity = 30, refillTokens = 30, refillSeconds = 60)
     public String getJobPosting(Long jobId) {
         Optional<JobListing> opt = jobListingRepository.findById(jobId);
         if (opt.isEmpty()) {
