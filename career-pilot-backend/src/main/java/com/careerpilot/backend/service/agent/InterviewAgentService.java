@@ -47,43 +47,43 @@ public class InterviewAgentService {
         String prompt = """
                 Track: %s
                 Track Objective: %s
-                
-                Candidate CV:
+
+                Candidate CV (use ONLY to calibrate difficulty and communication style — do NOT mix CV projects into the question unless the CV is directly relevant to this track):
                 %s
-                
+
                 %s
-                
+
                 Question Bank Reference:
                 %s
-                
-                This is the VERY FIRST question of the interview. Generate a question that is:
-                
-                CRITICAL — VARY THE OPENING STYLE. Pick ONE of these randomly:
-                1. Technical deep-dive: ask them to solve a specific problem or design something
-                2. Experience-based: ask about a specific challenge related to their CV
-                3. Scenario-based: present a realistic work scenario and ask how they'd handle it
-                4. Opinion-based: ask their opinion on a current trend or technology choice
-                5. Behavioral: ask about a past situation that demonstrates a key skill
-                
-                Do NOT start with "walk me through your experience" or "tell me about yourself".
-                Do NOT ask a generic introductory question.
-                Anchor the question to their CV and track objective.
-                Make it concrete, specific, and immediately engaging.
-                
+
+                This is the VERY FIRST question of the interview.
+
+                STRICT RULES:
+                - The question MUST be squarely about the "%s" track. Do not reference the candidate's CV projects or past experience from other domains unless they are directly relevant to this track.
+                - Use the CV only to decide the difficulty level (junior/senior) and the candidate's likely communication style.
+                - Pick ONE opening style randomly:
+                  1. Technical problem: ask them to solve a concrete technical problem in this domain
+                  2. Scenario-based: present a realistic work scenario in this domain and ask how they'd handle it
+                  3. Opinion/trade-off: ask their view on a technology choice or design decision within this track
+                  4. Behavioral (track-relevant): ask about a specific skill that matters for this track
+                - Do NOT start with "walk me through your experience" or "tell me about yourself".
+                - Do NOT ask a generic or vague question.
+                - Make it concrete, specific, and immediately engaging.
+
                 Use the tools available to you:
-                - searchQuestionBank: find questions from the bank for inspiration
-                - searchWeb: find current/trending interview questions
+                - searchQuestionBank: find questions from the bank for this track
+                - searchWeb: find current/trending interview questions for this track
                 - getJobPosting: fetch the full job description when you need the exact requirements
-                
+
                 Return ONLY raw JSON: {"text": "your question here", "sourceQuestionId": null}
                 """.formatted(trackName,
-                trackDescription != null ? trackDescription : "Assess the candidate's skills",
-                cvContext, jobContext, questionBankContext);
+                trackDescription != null ? trackDescription : "Assess the candidate's skills for this track",
+                cvContext, jobContext, questionBankContext, trackName);
 
         log.info("Agent generating first question for track: {}", trackName);
 
         String response = chatClient.prompt()
-                .system("You are Career Pilot AI — an expert interviewer. Generate a dynamic, varied first question. Do NOT use generic openers.")
+                .system("You are Career Pilot AI — an expert interviewer. Generate a focused, track-specific first question. The question MUST be about the given track. Do NOT mix the candidate's unrelated background into the question topic.")
                 .user(prompt)
                 .tools(interviewTools)
                 .call()
