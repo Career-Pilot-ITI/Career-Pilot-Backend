@@ -94,7 +94,7 @@ public class EmbeddingIndexService {
 
   public Optional<Track> matchTrack(String jobText, String fallbackTitle) {
     if (vectorState.countByType(VectorState.OBJECT_TYPE_TRACK) == 0) {
-      return matchTrackLexical(fallbackTitle);
+      return matchTrackLexical(fallbackTitle, jobText);
     }
 
     List<Document> results = vectorStore.similaritySearch(
@@ -110,13 +110,13 @@ public class EmbeddingIndexService {
 
     if (results == null || results.isEmpty()) {
       log.warn("No embedding match for job '{}' – falling back to lexical track match", fallbackTitle);
-      return matchTrackLexical(fallbackTitle);
+      return matchTrackLexical(fallbackTitle, jobText);
     }
 
     Object rawId = results.get(0).getMetadata().get("objectId");
     if (!(rawId instanceof Number number)) {
       log.warn("Unexpected objectId metadata type: {}", rawId);
-      return matchTrackLexical(fallbackTitle);
+      return matchTrackLexical(fallbackTitle, jobText);
     }
 
     return trackRepository.findById(number.longValue());
@@ -207,7 +207,7 @@ public class EmbeddingIndexService {
         && !NOT_SET.equals(embeddingApiKey);
   }
 
-  private Optional<Track> matchTrackLexical(String jobTitle) {
+  private Optional<Track> matchTrackLexical(String jobTitle, String jobContext) {
     if (jobTitle == null || jobTitle.isBlank()) {
       return Optional.empty();
     }
@@ -222,6 +222,10 @@ public class EmbeddingIndexService {
     }
 
     List<String> titleTokens = tokenize(normalizedTitle);
+    // The job description / job text adds context, but stays secondary to the title.
+    List<String> contextTokens = jobContext != null && !jobContext.isBlank()
+        ? tokenize(normalize(jobContext))
+        : List.of();
 
     // Inverse-document-frequency weighting: a token is more discriminating
     // when it appears in fewer tracks (e.g. "android" > "engineer").
@@ -251,12 +255,14 @@ public class EmbeddingIndexService {
         score += 100;
       }
       for (String tok : titleTokens) {
-        long df = tokenDocFreq.getOrDefault(tok, 0L);
-        double weight = 1.0 / (1 + Math.log(df == 0 ? 1 : df));
+        score += overlapWeight(tok, nameTokens, descTokens, tokenDocFreq);
+      }
+      // Description-backed context contributes less so it can't hijack a title match.
+      for (String tok : contextTokens) {
         if (nameTokens.contains(tok)) {
-          score += 4 * weight;
+          score += overlapWeight(tok, nameTokens, descTokens, tokenDocFreq);
         } else if (descTokens.contains(tok)) {
-          score += 1.5 * weight;
+          score += 0.5 * overlapWeight(tok, nameTokens, descTokens, tokenDocFreq);
         }
       }
       if (score > bestScore) {
@@ -270,6 +276,16 @@ public class EmbeddingIndexService {
       return Optional.empty();
     }
     return Optional.of(best);
+  }
+
+  private double overlapWeight(String token, Set<String> nameTokens, Set<String> descTokens,
+                               Map<String, Long> tokenDocFreq) {
+    long df = tokenDocFreq.getOrDefault(token, 0L);
+    double weight = 1.0 / (1 + Math.log(df == 0 ? 1 : df));
+    if (nameTokens.contains(token)) {
+      return 4 * weight;
+    }
+    return descTokens.contains(token) ? 1.5 * weight : 0;
   }
 
   private String normalize(String text) {
