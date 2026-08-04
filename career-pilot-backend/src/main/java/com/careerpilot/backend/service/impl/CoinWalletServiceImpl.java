@@ -43,7 +43,6 @@ public class CoinWalletServiceImpl implements ICoinWalletService {
     CoinWallet wallet = walletRepository.findByUserIdForUpdate(userId)
         .orElseThrow(() -> new WalletException.WalletNotFoundException("No wallet found for user: " + userId));
     wallet.setBalance(wallet.getBalance() + amount);
-    walletRepository.save(wallet);
     writeLedgerEntry(wallet, amount, reason, referenceId);
   }
 
@@ -70,7 +69,6 @@ public class CoinWalletServiceImpl implements ICoinWalletService {
           "Insufficient coin balance: have " + wallet.getBalance() + ", need " + amount);
     }
     wallet.setBalance(wallet.getBalance() - amount);
-    walletRepository.save(wallet);
     writeLedgerEntry(wallet, -amount, reason, referenceId);
   }
 
