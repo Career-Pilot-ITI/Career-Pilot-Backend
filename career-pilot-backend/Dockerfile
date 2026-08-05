@@ -8,10 +8,6 @@ ARG MAVEN_PROFILE=openai
 RUN mvn package -DskipTests -B -P ${MAVEN_PROFILE}
 RUN java -Djarmode=layertools -jar target/*.jar extract --destination /extracted
 
-ARG OTEL_JAVA_AGENT_VERSION=v2.30.0
-RUN curl -fL -o /grafana-opentelemetry-java.jar \
-    https://github.com/grafana/grafana-opentelemetry-java/releases/download/${OTEL_JAVA_AGENT_VERSION}/grafana-opentelemetry-java.jar
-
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
@@ -21,9 +17,8 @@ COPY --from=build /extracted/dependencies/ ./
 COPY --from=build /extracted/spring-boot-loader/ ./
 COPY --from=build /extracted/snapshot-dependencies/ ./
 COPY --from=build /extracted/application/ ./
-COPY --from=build /grafana-opentelemetry-java.jar /app/grafana-opentelemetry-java.jar
 
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom -javaagent:/app/grafana-opentelemetry-java.jar"
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
 EXPOSE 8080
 

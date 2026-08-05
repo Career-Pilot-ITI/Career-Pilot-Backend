@@ -3,8 +3,6 @@ server:
   shutdown: graceful
 
 spring:
-  application:
-    name: career-pilot-backend
   lifecycle:
     timeout-per-shutdown-phase: 30s
   jackson:
@@ -183,8 +181,6 @@ management:
       enabled: false
 
 logging:
-  pattern:
-    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
   level:
     org.springframework.security: WARN
     org.springframework.web: DEBUG
