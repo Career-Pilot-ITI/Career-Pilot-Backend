@@ -2,20 +2,24 @@ package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.WalletException;
 import com.careerpilot.backend.controller.advice.WorkspaceException;
+import com.careerpilot.backend.dto.response.AiJobResponse;
 import com.careerpilot.backend.dto.response.AtsScore;
 import com.careerpilot.backend.dto.response.AtsScoreResponse;
 import com.careerpilot.backend.dto.response.CoverLetterDraft;
 import com.careerpilot.backend.dto.response.CoverLetterResponse;
-import com.careerpilot.backend.dto.response.CvOptimization;
-import com.careerpilot.backend.dto.response.CvOptimizationResponse;
+import com.careerpilot.backend.entity.AiJob;
+import com.careerpilot.backend.entity.ENUMs.AiJobStatus;
+import com.careerpilot.backend.entity.ENUMs.AiJobType;
 import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
 import com.careerpilot.backend.entity.ENUMs.DocType;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
+import com.careerpilot.backend.entity.JobListing;
 import com.careerpilot.backend.entity.JobWorkspace;
 import com.careerpilot.backend.entity.RagContextDocument;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserSkill;
+import com.careerpilot.backend.repository.IAiJobRepository;
 import com.careerpilot.backend.repository.IJobWorkspaceRepository;
 import com.careerpilot.backend.repository.IRagContextDocumentRepository;
 import com.careerpilot.backend.repository.ISubscriptionRepository;
@@ -28,11 +32,14 @@ import com.careerpilot.backend.service.ISessionQuotaService;
 import com.careerpilot.backend.service.agent.CoverLetterAgentService;
 import com.careerpilot.backend.service.agent.WebSearchService;
 import com.careerpilot.backend.utils.PiiRedactionUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,10 +62,14 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
   private final ITrackRepository trackRepository;
   private final IUserProfileRepository userProfileRepository;
   private final ISubscriptionRepository subscriptionRepository;
+  private final IAiJobRepository aiJobRepository;
 
   private final ILlmService llmService;
   private final ISessionQuotaService sessionQuotaService;
   private final CoverLetterAgentService coverLetterAgentService;
+  private final CvOptimizationJobExecutor cvOptimizationJobExecutor;
+
+  private final ObjectMapper objectMapper;
 
   private final WebSearchService webSearchService;
 
@@ -90,19 +101,42 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
 
   @Override
   @Transactional
-  public CvOptimizationResponse optimizeCv(Long workspaceId, Long userId) {
+  public AiJobResponse optimizeCv(Long workspaceId, Long userId) {
     JobWorkspace workspace = requireWorkspace(workspaceId, userId);
-    String cvText = latestCvText(userId);
+    String rawCvText = latestRawCvText(userId);
     int coinCost = requireEntitled(userId, optimizeCvCoinCost, CoinLedgerReason.CV_OPTIMIZE);
 
-    List<UserSkill> skills = userSkillRepository.findByUserId(userId);
-    List<Track> tracks = trackRepository.findByIsActiveTrue();
-    CvOptimization optimized = llmService.optimizeCv(cvText, workspace.getJob(), skills, tracks);
+    // Reuse an in-flight job for the same workspace instead of double-charging.
+    List<AiJob> activeJobs = aiJobRepository.findActiveByWorkspaceAndType(
+        workspaceId, AiJobType.CV_OPTIMIZE,
+        List.of(AiJobStatus.PENDING, AiJobStatus.PROCESSING));
+    if (!activeJobs.isEmpty()) {
+      return AiJobResponse.from(activeJobs.get(0), objectMapper);
+    }
 
-    workspace.setCvOptimizedText(optimized.optimizedCv());
-    jobWorkspaceRepository.save(workspace);
+    AiJob job = AiJob.builder()
+        .user(workspace.getUser())
+        .workspace(workspace)
+        .type(AiJobType.CV_OPTIMIZE)
+        .status(AiJobStatus.PENDING)
+        .progressPercentage(0)
+        .currentStep("Queued...")
+        .build();
+    job = aiJobRepository.save(job);
 
-    return CvOptimizationResponse.from(optimized, coinCost);
+    final Long jobId = job.getId();
+    final JobListing jobListing = workspace.getJob();
+
+    // Kick off the async LLM work only after this transaction commits, so the
+    // executor (running in another thread/transaction) can see the job row.
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        cvOptimizationJobExecutor.executeOptimization(jobId, userId, rawCvText, jobListing, coinCost);
+      }
+    });
+
+    return AiJobResponse.from(job, objectMapper);
   }
 
   @Override
@@ -143,6 +177,16 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
           "No CV found. Please upload your CV first.");
     }
     return PiiRedactionUtil.redact(docs.get(0).getContent());
+  }
+
+  private String latestRawCvText(Long userId) {
+    List<RagContextDocument> docs = ragContextDocumentRepository
+        .findByUserIdAndDocTypeOrderByCreatedAtDesc(userId, DocType.CV_EXTRACT);
+    if (docs.isEmpty()) {
+      throw new WorkspaceException.CvNotFoundException(
+          "No CV found. Please upload your CV first.");
+    }
+    return docs.get(0).getContent();
   }
 
   private int requireEntitled(Long userId, int cost, CoinLedgerReason reason) {
