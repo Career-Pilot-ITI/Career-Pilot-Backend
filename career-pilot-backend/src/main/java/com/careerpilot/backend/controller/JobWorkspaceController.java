@@ -4,11 +4,12 @@ import com.careerpilot.backend.controller.response.ApiResponse;
 import com.careerpilot.backend.dto.request.ImportJobTextRequest;
 import com.careerpilot.backend.dto.request.ImportJobUrlRequest;
 import com.careerpilot.backend.dto.request.UpdateWorkspaceStatusRequest;
+import com.careerpilot.backend.dto.response.AiJobResponse;
 import com.careerpilot.backend.dto.response.AtsScoreResponse;
 import com.careerpilot.backend.dto.response.CoverLetterResponse;
-import com.careerpilot.backend.dto.response.CvOptimizationResponse;
 import com.careerpilot.backend.dto.response.JobWorkspaceResponse;
 import com.careerpilot.backend.security.SecurityUtil;
+import com.careerpilot.backend.service.IAiJobService;
 import com.careerpilot.backend.service.IJobWorkspaceAiService;
 import com.careerpilot.backend.service.IJobWorkspaceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,7 @@ public class JobWorkspaceController {
 
     private final IJobWorkspaceService workspaceService;
     private final IJobWorkspaceAiService workspaceAiService;
+    private final IAiJobService aiJobService;
     private final SecurityUtil securityUtil;
 
     @PostMapping("/import/text")
@@ -125,12 +127,25 @@ public class JobWorkspaceController {
 
     @PostMapping("/{id}/cv/optimize")
     @Operation(summary = "Optimize the user's CV for the job",
-            description = "Rewrites the CV to better match the job posting, using post-interview skill scores, and recommends the best tracks to cover remaining skill gaps. Coin-gated for FREE tier; PLUS/PRO are free.")
-    public ResponseEntity<ApiResponse<CvOptimizationResponse>> optimizeCv(@PathVariable Long id) {
-        CvOptimizationResponse result = workspaceAiService.optimizeCv(id, securityUtil.getCurrentUserId());
+            description = "Kicks off an async CV optimization: splits the CV into sections and improves each section against the job posting using post-interview skill scores. Returns an AI job id immediately; poll GET /api/v1/ai-jobs/{jobId} for progress and the sectioned result. Coin-gated for FREE tier; PLUS/PRO are free.")
+    public ResponseEntity<ApiResponse<AiJobResponse>> optimizeCv(@PathVariable Long id) {
+        AiJobResponse result = workspaceAiService.optimizeCv(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.accepted().body(ApiResponse.builder()
+                .success(true)
+                .message("CV optimization queued")
+                .data(result)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @GetMapping("/ai-jobs/{jobId}")
+    @Operation(summary = "Get the status of an AI job",
+            description = "Pull endpoint for async AI jobs (e.g. CV optimization). Returns PENDING/PROCESSING with progress, or COMPLETED with the result / FAILED with an error. Ownership-checked against the authenticated user.")
+    public ResponseEntity<ApiResponse<AiJobResponse>> getAiJob(@PathVariable Long jobId) {
+        AiJobResponse result = aiJobService.getJobStatus(jobId, securityUtil.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.builder()
                 .success(true)
-                .message("CV optimized")
+                .message("AI job status retrieved")
                 .data(result)
                 .timestamp(LocalDateTime.now())
                 .build());

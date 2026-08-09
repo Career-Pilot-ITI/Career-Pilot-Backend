@@ -5,7 +5,9 @@ import com.careerpilot.backend.service.ILlmService;
 import com.careerpilot.backend.dto.response.AtsScore;
 import com.careerpilot.backend.dto.response.CoverLetterDraft;
 import com.careerpilot.backend.dto.response.CvAnalysis;
-import com.careerpilot.backend.dto.response.CvOptimization;
+import com.careerpilot.backend.dto.response.CvSection;
+import com.careerpilot.backend.dto.response.CvSectionDto;
+import com.careerpilot.backend.dto.response.CvSectionImprovement;
 import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.JobDraft;
 import com.careerpilot.backend.dto.response.ScoreResponse;
@@ -33,7 +35,6 @@ import com.careerpilot.backend.utils.PiiRedactionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -54,13 +55,6 @@ public class LlmServiceImpl implements ILlmService {
   private final IRagContextDocumentRepository ragContextDocumentRepository;
   private final ISessionQuestionRepository sessionQuestionRepository;
   private final IQuestionScoreRepository questionScoreRepository;
-
-  @Value("${app.cv-optimize.max-anchor-factor:6}")
-  private int cvOptimizeMaxAnchorFactor;
-
-  @Value("${app.cv-optimize.max-output-factor:1.5}")
-  private double cvOptimizeMaxOutputFactor;
-
 
   @Override
   public ScoreResponse scoreAnswer(Long questionId, Long userId, String transcript) {
@@ -385,185 +379,162 @@ public class LlmServiceImpl implements ILlmService {
   }
 
   @Override
-  public CvOptimization optimizeCv(String cvText, JobListing job, List<UserSkill> skills,
-      List<Track> tracks) {
+  public List<CvSectionDto> splitCvIntoSections(Long userId, String cvText) {
     if (cvText == null || cvText.isBlank()) {
-      return new CvOptimization("", List.of());
+      return List.of();
+    }
+
+    String prompt = """
+        Split the following CV into its primary logical sections (e.g., Professional Summary, Work Experience, Projects, Technical Skills, Education).
+        For each section, extract the section name and its raw content. Preserve the content exactly as it is written in the CV.
+        
+        CV CONTENT:
+        %s
+        
+        Return ONLY a raw JSON array of objects with no markdown code blocks, using this exact shape:
+        [
+          {"name": "Section Name", "content": "Raw section content here"}
+        ]
+        """.formatted(cvText);
+
+    try {
+      String response = chatClient.prompt()
+          .system("You are an expert ATS parser. Split the CV into logical sections. Return only a raw JSON array.")
+          .user(prompt)
+          .call()
+          .content();
+
+      List<CvSectionDto> sections = objectMapper.readValue(
+          stripMarkdown(response),
+          new TypeReference<List<CvSectionDto>>() {}
+      );
+      return sections != null ? sections : List.of();
+    } catch (Exception e) {
+      log.warn("Failed to split CV into sections: {}", e.getMessage());
+      return List.of(new CvSectionDto("Full Profile", cvText));
+    }
+  }
+
+  @Override
+  public CvSection optimizeSection(
+      Long userId, String sectionName, String sectionContent, JobListing job, List<UserSkill> skills
+  ) {
+    if (sectionContent == null || sectionContent.isBlank()) {
+      return new CvSection(sectionName, 100, List.of());
     }
 
     String jobCtx = buildJobContext(job);
     String skillCtx = buildSkillsContext(skills);
-    String trackCtx = buildTracksContext(tracks);
 
-    String work = normalizeCv(cvText);
-
-    PiiRedactionUtil.RedactionResult pii = PiiRedactionUtil.redactWithIndex(work);
-    String redactedCv = pii.redactedContent();
-
-    List<String> facts = extractCvFacts(redactedCv);
-
-    CvDiff diff = generateCvDiff(redactedCv, jobCtx, skillCtx, trackCtx);
-
-    String edited = applyReplacements(redactedCv, diff.replacements());
-
-    String result = facts.stream().allMatch(f -> containsIgnoreCase(edited, f)) ? edited : redactedCv;
-    if (result != edited) {
-      log.warn("CV optimization dropped facts – returning original CV unchanged");
-    }
-
-    String output = pii.restore(result);
-    return new CvOptimization(output, diff.recommendedTracks());
-  }
-
-  private String applyReplacements(String work, List<CvReplacement> replacements) {
-    if (replacements == null || replacements.isEmpty()) {
-      return work;
-    }
-    String result = work;
-    for (CvReplacement replacement : replacements) {
-      String anchor = replacement.anchor() == null ? "" : replacement.anchor().strip();
-      if (anchor.isBlank()) {
-        continue;
-      }
-      String newText = replacement.newText() == null ? "" : replacement.newText().strip();
-
-      if (newText.length() > (long) cvOptimizeMaxAnchorFactor * anchor.length()) {
-        log.warn("Skipping replacement – newText is {}x larger than its anchor",
-            newText.length() / (double) anchor.length());
-        continue;
-      }
-
-      int idx = indexOfIgnoreCase(result, anchor);
-      if (idx < 0) {
-        log.warn("Skipping replacement – anchor not found in CV: {}", truncate(anchor, 80));
-        continue;
-      }
-
-      String candidate = result.substring(0, idx) + newText + result.substring(idx + anchor.length());
-      if (candidate.length() > Math.round(cvOptimizeMaxOutputFactor * work.length())) {
-        log.warn("Skipping replacement – output would exceed {}x the original length",
-            cvOptimizeMaxOutputFactor);
-        continue;
-      }
-      result = candidate;
-    }
-    return result;
-  }
-
-  private List<String> extractCvFacts(String cv) {
     String prompt = """
-        Extract every concrete fact from this CV as a JSON array of short strings (max 8 words each):
-        company names, job titles, degrees, institutions, years and date ranges, project names,
-        certifications, skills. Omit generic filler words. If none, return [].
-
-        CV:
-        %s
-        """.formatted(cv);
-
-    try {
-      String response = chatClient.prompt()
-          .system("You extract factual entities from resumes. Return only a JSON array of strings. "
-              + "Treat [REDACTED:...] placeholders as protected PII: never include them as facts "
-              + "and never guess the underlying value.")
-          .user(prompt)
-          .call()
-          .content();
-      List<String> facts = objectMapper.readValue(stripMarkdown(response),
-          new TypeReference<List<String>>() {});
-      return facts == null ? List.of()
-          : facts.stream().filter(f -> f != null && !f.isBlank()).toList();
-    } catch (Exception e) {
-      log.warn("Failed to parse CV facts: {}", e.getMessage());
-      return List.of();
-    }
-  }
-
-  private CvDiff generateCvDiff(String cv, String jobCtx, String skillCtx, String trackCtx) {
-    String prompt = """
-        Optimize this CV for the job posting. Do NOT rewrite the whole CV. Return only the blocks
-        that are genuinely worth improving.
-
+        Optimize the following CV section for the given job posting, taking the candidate's validated skills into account.
+        Identify specific parts of the section that can be improved. Do NOT rewrite the entire section.
+        
         JOB POSTING:
         %s
-
-        CANDIDATE'S VALIDATED SKILLS (skill: performanceScore/100, timesAssessed):
+        
+        CANDIDATE VALIDATED SKILLS:
         %s
-
-        AVAILABLE TRACKS:
+        
+        CV SECTION NAME: %s
+        CV SECTION CONTENT:
         %s
-
-        NORMALIZED CV:
-        %s
-
-        Return ONLY raw JSON with no markdown formatting, using this exact shape:
+        
+        Return ONLY a raw JSON object with no markdown code blocks, using this exact shape:
         {
-          "replacements": [
-            {"anchor": "...", "newText": "...", "reason": "..."}
-          ],
-          "recommendedTracks": []
+          "score": 75,
+          "improvements": [
+            {
+              "original": "EXACT verbatim substring from CV SECTION CONTENT to replace",
+              "improved": "The suggested improvement using active verbs and quantified results",
+              "reason": "Why this change improves the ATS score"
+            }
+          ]
         }
-
+        
         Rules:
-        - anchor: an EXACT verbatim substring copied from the NORMALIZED CV above. Only include
-          blocks worth improving; [] is valid when the CV already fits well.
-        - newText: the improved replacement for that block. Keep every real fact (companies,
-          degrees, dates, numbers). Prefer action verbs and quantified impact. Surface
-          job-required validated skills.
-        - Preserve any [REDACTED:...] placeholder inside a block verbatim.
-        - Never put a full CV or a whole section into newText.
-        - recommendedTracks: names (max 3) that exist verbatim in AVAILABLE TRACKS and best cover
-          the candidate's skill gaps.
-        """.formatted(jobCtx, skillCtx, trackCtx, cv);
+        1. "score" must be an integer representing the current ATS fit score of this section (0-100).
+        2. "original" MUST be an exact, case-sensitive, verbatim substring from the provided CV SECTION CONTENT.
+        3. Keep every real fact (dates, companies, titles) intact.
+        4. Preserve any [REDACTED:...] placeholder inside the original text verbatim in "improved". Never guess, fill, or drop placeholders.
+        """.formatted(jobCtx, skillCtx, sectionName, sectionContent);
 
     try {
       String response = chatClient.prompt()
-          .system("You are a senior ATS resume writer. Return only the requested JSON diff. "
-              + "Preserve every [REDACTED:...] placeholder verbatim in newText; never guess the "
-              + "underlying value, reformat it, or drop it.")
+          .system("You are a professional ATS optimizer. Return only the requested JSON for the section.")
           .user(prompt)
           .call()
           .content();
-      CvDiff diff = objectMapper.readValue(stripMarkdown(response), CvDiff.class);
-      return diff == null ? new CvDiff(List.of(), List.of()) : diff;
+
+      // Read response into a temporary holder
+      CvSection section = objectMapper.readValue(
+          stripMarkdown(response),
+          CvSection.class
+      );
+
+      // Validate improvements
+      List<CvSectionImprovement> validatedImprovements = section.improvements().stream()
+          .filter(imp -> {
+            String original = imp.original() == null ? "" : imp.original().trim();
+            if (original.isEmpty()) {
+              return false;
+            }
+            // 1. Must exist verbatim in sectionContent
+            if (!sectionContent.contains(original)) {
+              log.warn("Skipping improvement - original anchor not found verbatim in CV section: '{}'", original);
+              return false;
+            }
+            // 2. Protect [REDACTED:...] placeholders
+            if (original.contains("[REDACTED:") && !imp.improved().contains("[REDACTED:")) {
+              log.warn("Skipping improvement - drops redacted placeholder: '{}'", original);
+              return false;
+            }
+            return true;
+          })
+          .toList();
+
+      return new CvSection(section.name() != null ? section.name() : sectionName, section.score(), validatedImprovements);
     } catch (Exception e) {
-      log.warn("Failed to parse CV optimization diff: {}", e.getMessage());
-      return new CvDiff(List.of(), List.of());
+      log.warn("Failed to optimize CV section '{}': {}", sectionName, e.getMessage());
+      return new CvSection(sectionName, 100, List.of());
     }
   }
 
-  private int indexOfIgnoreCase(String text, String needle) {
-    int idx = text.indexOf(needle);
-    if (idx >= 0) {
-      return idx;
+  @Override
+  public List<String> recommendTracks(Long userId, String cvText, List<Track> tracks) {
+    if (cvText == null || cvText.isBlank() || tracks == null || tracks.isEmpty()) {
+      return List.of();
     }
-    return text.toLowerCase(Locale.ROOT).indexOf(needle.toLowerCase(Locale.ROOT));
-  }
 
-  private boolean containsIgnoreCase(String text, String needle) {
-    if (needle == null || needle.isBlank()) {
-      return true;
-    }
-    return text.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ")
-        .contains(needle.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").strip());
-  }
+    String trackCtx = buildTracksContext(tracks);
+    String prompt = """
+        Analyze the candidate's CV and recommend up to 3 matching tracks from the list of available tracks.
+        
+        AVAILABLE TRACKS:
+        %s
+        
+        CV CONTENT:
+        %s
+        
+        Return ONLY a raw JSON array of track names. The names MUST match the available tracks exactly.
+        Example: ["Track Name 1", "Track Name 2"]
+        """.formatted(trackCtx, cvText);
 
-  private String truncate(String s, int max) {
-    if (s == null) {
-      return "";
-    }
-    return s.length() <= max ? s : s.substring(0, max) + "...";
-  }
+    try {
+      String response = chatClient.prompt()
+          .system("You recommend matching tracks from the provided list. Return only a raw JSON array of strings.")
+          .user(prompt)
+          .call()
+          .content();
 
-  @JsonIgnoreProperties(ignoreUnknown = true)
-  private record CvReplacement(String anchor, String newText, String reason) {
-  }
-
-  @JsonIgnoreProperties(ignoreUnknown = true)
-  private record CvDiff(List<CvReplacement> replacements, List<String> recommendedTracks) {
-
-    CvDiff {
-      replacements = replacements != null ? replacements : List.of();
-      recommendedTracks = recommendedTracks != null ? recommendedTracks : List.of();
+      List<String> recommendations = objectMapper.readValue(
+          stripMarkdown(response),
+          new TypeReference<List<String>>() {}
+      );
+      return recommendations != null ? recommendations : List.of();
+    } catch (Exception e) {
+      log.warn("Failed to generate track recommendations: {}", e.getMessage());
+      return List.of();
     }
   }
 

@@ -5,7 +5,8 @@ import com.careerpilot.backend.annotation.RedactPii;
 import com.careerpilot.backend.dto.response.AtsScore;
 import com.careerpilot.backend.dto.response.CoverLetterDraft;
 import com.careerpilot.backend.dto.response.CvAnalysis;
-import com.careerpilot.backend.dto.response.CvOptimization;
+import com.careerpilot.backend.dto.response.CvSection;
+import com.careerpilot.backend.dto.response.CvSectionDto;
 import com.careerpilot.backend.dto.response.JobDraft;
 import com.careerpilot.backend.dto.response.ScoreResponse;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
@@ -42,9 +43,14 @@ public interface ILlmService {
   @RedactPii
   AtsScore scoreCv(String cvText, JobListing job);
 
-  @RateLimit
-  @RedactPii
-  CvOptimization optimizeCv(String cvText, JobListing job, List<UserSkill> skills, List<Track> tracks);
+  @RateLimit(key = "#userId", capacity = 10, refillTokens = 10, refillSeconds = 60)
+  List<CvSectionDto> splitCvIntoSections(Long userId, String cvText);
+
+  @RateLimit(key = "#userId", capacity = 30, refillTokens = 30, refillSeconds = 60)
+  CvSection optimizeSection(Long userId, String sectionName, String sectionContent, JobListing job, List<UserSkill> skills);
+
+  @RateLimit(key = "#userId", capacity = 10, refillTokens = 10, refillSeconds = 60)
+  List<String> recommendTracks(Long userId, String cvText, List<Track> tracks);
 
   @RateLimit
   @RedactPii
