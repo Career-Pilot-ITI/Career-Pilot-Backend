@@ -57,7 +57,11 @@ public class CvOptimizationJobExecutor {
             aiJob.setCurrentStep("Preparing CV and redacting sensitive data...");
             aiJobRepository.save(aiJob);
 
-            // Step 1: Redact CV PII before sending to LLM
+            // Manual reversible redaction: builds one index over the whole
+            // normalized CV, then restores it against the final assembled JSON.
+            // @RedactPii can't replace this - it only redacts/restores the
+            // String args of a single proxied call, but our result is produced
+            // by N LLM calls (split -> optimize each section -> tracks).
             String normalized = rawCvText.replaceAll("\\s+", " ").trim();
             PiiRedactionUtil.RedactionResult piiResult = PiiRedactionUtil.redactWithIndex(normalized);
             String redactedCv = piiResult.redactedContent();
