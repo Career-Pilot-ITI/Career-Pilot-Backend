@@ -19,6 +19,7 @@ import com.careerpilot.backend.entity.RagContextDocument;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.UserProfile;
 import com.careerpilot.backend.entity.UserSkill;
+import com.careerpilot.backend.event.CvOptimizationRequestedEvent;
 import com.careerpilot.backend.repository.IAiJobRepository;
 import com.careerpilot.backend.repository.IJobWorkspaceRepository;
 import com.careerpilot.backend.repository.IRagContextDocumentRepository;
@@ -36,10 +37,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -67,7 +67,8 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
   private final ILlmService llmService;
   private final ISessionQuotaService sessionQuotaService;
   private final CoverLetterAgentService coverLetterAgentService;
-  private final CvOptimizationJobExecutor cvOptimizationJobExecutor;
+
+  private final ApplicationEventPublisher applicationEventPublisher;
 
   private final ObjectMapper objectMapper;
 
@@ -127,14 +128,11 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
     final Long jobId = job.getId();
     final JobListing jobListing = workspace.getJob();
 
-    // Kick off the async LLM work only after this transaction commits, so the
-    // executor (running in another thread/transaction) can see the job row.
-    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-      @Override
-      public void afterCommit() {
-        cvOptimizationJobExecutor.executeOptimization(jobId, userId, rawCvText, jobListing, coinCost);
-      }
-    });
+    // Kick off the async LLM work only after this transaction commits (via the
+    // @TransactionalEventListener), so the executor running in another thread
+    // can see the persisted job row.
+    applicationEventPublisher.publishEvent(
+        new CvOptimizationRequestedEvent(jobId, userId, rawCvText, jobListing, coinCost));
 
     return AiJobResponse.from(job, objectMapper);
   }
