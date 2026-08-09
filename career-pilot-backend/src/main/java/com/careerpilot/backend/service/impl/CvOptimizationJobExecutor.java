@@ -1,6 +1,8 @@
 package com.careerpilot.backend.service.impl;
 
-import com.careerpilot.backend.dto.response.*;
+import com.careerpilot.backend.dto.response.CvOptimizationResponse;
+import com.careerpilot.backend.dto.response.CvSection;
+import com.careerpilot.backend.dto.response.CvSectionDto;
 import com.careerpilot.backend.entity.AiJob;
 import com.careerpilot.backend.entity.ENUMs.AiJobStatus;
 import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
@@ -8,7 +10,6 @@ import com.careerpilot.backend.entity.JobListing;
 import com.careerpilot.backend.entity.Track;
 import com.careerpilot.backend.entity.UserSkill;
 import com.careerpilot.backend.repository.IAiJobRepository;
-import com.careerpilot.backend.repository.IJobWorkspaceRepository;
 import com.careerpilot.backend.repository.ITrackRepository;
 import com.careerpilot.backend.repository.IUserSkillRepository;
 import com.careerpilot.backend.service.ICoinWalletService;
@@ -17,12 +18,13 @@ import com.careerpilot.backend.utils.PiiRedactionUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @RequiredArgsConstructor
@@ -35,8 +37,9 @@ public class CvOptimizationJobExecutor {
     private final ITrackRepository trackRepository;
     private final ICoinWalletService coinWalletService;
     private final ObjectMapper objectMapper;
+    private final TaskExecutor taskExecutor;
 
-    @Async("taskExecutor")
+    @Async
     public void executeOptimization(Long jobId, Long userId, String rawCvText, JobListing job, int coinCost) {
         log.info("Starting CV optimization job ID: {} for user: {}", jobId, userId);
 
@@ -69,28 +72,19 @@ public class CvOptimizationJobExecutor {
                 parsedSections = List.of(new CvSectionDto("Full Profile", redactedCv));
             }
 
-            // Step 3: Optimize sections one-by-one to prevent size/parsing errors
+            // Step 3: Optimize every section in parallel so wall-clock time is
+            // bounded by the slowest section, not the sum of all of them.
             List<UserSkill> skills = userSkillRepository.findByUserId(userId);
-            List<CvSection> optimizedSections = new ArrayList<>();
 
-            int totalSections = parsedSections.size();
-            for (int i = 0; i < totalSections; i++) {
-                CvSectionDto section = parsedSections.get(i);
-                String stepMsg = String.format("Optimizing section '%s' (%d/%d)...", section.name(), i + 1, totalSections);
-                log.info("Job {}: {}", jobId, stepMsg);
+            aiJob.setCurrentStep("Optimizing CV sections in parallel...");
+            aiJob.setProgressPercentage(25);
+            aiJobRepository.save(aiJob);
 
-                aiJob.setCurrentStep(stepMsg);
-                int progress = 20 + (int) (((double) i / totalSections) * 60); // range from 20% to 80%
-                aiJob.setProgressPercentage(progress);
-                aiJobRepository.save(aiJob);
-
-                CvSection optimizedSec = llmService.optimizeSection(userId, section.name(), section.content(), job, skills);
-                optimizedSections.add(optimizedSec);
-            }
+            List<CvSection> optimizedSections = optimizeSectionsInParallel(userId, parsedSections, job, skills);
 
             // Step 4: Recommend matching tracks
             aiJob.setCurrentStep("Generating matching career tracks...");
-            aiJob.setProgressPercentage(90);
+            aiJob.setProgressPercentage(85);
             aiJobRepository.save(aiJob);
 
             List<Track> tracks = trackRepository.findByIsActiveTrue();
@@ -132,5 +126,26 @@ public class CvOptimizationJobExecutor {
                 log.error("Failed to refund coins to user {} for job {}", userId, jobId, refundEx);
             }
         }
+    }
+
+    private List<CvSection> optimizeSectionsInParallel(
+            Long userId, List<CvSectionDto> sections, JobListing job, List<UserSkill> skills) {
+        List<CompletableFuture<CvSection>> futures = sections.stream()
+            .map(section -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    return llmService.optimizeSection(userId, section.name(), section.content(), job, skills);
+                } catch (Exception e) {
+                    // One broken section must not sink the whole job.
+                    log.error("Failed to optimize CV section '{}': {}", section.name(), e.getMessage());
+                    return new CvSection(section.name(), 0, List.of());
+                }
+            }, taskExecutor))
+            .toList();
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        return futures.stream()
+            .map(CompletableFuture::join)
+            .toList();
     }
 }
