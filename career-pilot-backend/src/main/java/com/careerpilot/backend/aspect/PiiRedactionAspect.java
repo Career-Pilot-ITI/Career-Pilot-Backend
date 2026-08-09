@@ -20,8 +20,7 @@ import com.careerpilot.backend.utils.PiiRedactionUtil.RedactionResult;
 public class PiiRedactionAspect {
 
   private final ObjectMapper objectMapper = new ObjectMapper();
-
-  @Around("@annotation(com.careerpilot.backend.aspect.RedactPii)")
+  @Around("@annotation(com.careerpilot.backend.annotation.RedactPii)")
   public Object redactStringParams(ProceedingJoinPoint pjp) throws Throwable {
     Object[] args = pjp.getArgs();
     List<RedactionResult> results = new ArrayList<>();
