@@ -104,6 +104,15 @@ public class JobListing {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "company_logo_url", length = 1024)
+    private String companyLogoUrl;
+
+    @Column(name = "posted_label", length = 100)
+    private String postedLabel;
+
+    @Column(name = "applicants_label", length = 100)
+    private String applicantsLabel;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -158,11 +167,13 @@ public class JobListing {
                 .requiredSkills(new ArrayList<>())
                 .preferredSkills(new ArrayList<>())
                 .technologies(new ArrayList<>())
+                .companyLogoUrl(r.companyLogo())
+                .postedLabel(r.postedLabel())
+                .applicantsLabel(r.applicants())
                 .sourceUrl(sourceUrl)
                 .sourceType(JobSourceType.URL)
                 .build();
     }
-
     private static String normalizeEmploymentType(String raw) {
         if (raw == null) return null;
         String upper = raw.toUpperCase().replace(" ", "_");

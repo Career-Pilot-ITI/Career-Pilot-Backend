@@ -1,0 +1,25 @@
+[33m304d9ce[m feat: questions are now embedded and used for relvant for each track
+[33m4598096[m hot fix: optional track id optional
+[33ma9b2633[m fix: unwrap optional type
+[33m0ef5c91[m feat: created embedding service and replace lexial analysis
+[33mde3162f[m[33m ([m[1;31morigin/interivew-for-job[m[33m)[m feat: added workspace and linked to the session and interivew posting
+[33m3dc9dac[m refactor(quota): extract shared SessionQuotaService
+[33m905f009[m[33m ([m[1;31morigin/feature/agentic-interview[m[33m)[m feat: added coin based price per session
+[33md3d9416[m feat: added fallback to teh first question as it is very diverge
+[33ma4cef4d[m feat: agentic interview loop with tool calling and web search
+[33mdf7bc12[m fix: hikari pool coneection
+[33me0a7f22[m Merge pull request #88 from Career-Pilot-ITI/feature/issue-42-session-history-pagination
+[33m876423c[m[33m ([m[1;31morigin/fix/empty-words-transaction-rollback[m[33m)[m fix: handle empty words[] and prevent transaction rollback on scoring failure
+[33mef0f883[m[33m ([m[1;31morigin/feature/issue-42-session-history-pagination[m[33m)[m feat: paginated session history endpoint
+[33mae5d494[m[33m ([m[1;32mfeature/coin-ledger[m[33m)[m implemented coin ledger
+[33m4f1009a[m[33m ([m[1;31morigin/fix/session-quota[m[33m, [m[1;32mfix/session-quota[m[33m)[m removed session pricing congfig
+[33mb7ec339[m fixed port mapping in docker-compose.yml and removed session pricing config
+[33m5f0e754[m fix(sessions): close quota-enforcement gaps in checkSessionQuota
+[33meda2b6f[m feat: added guard check for user qouta
+[33md461a8a[m[33m ([m[1;31morigin/session-state[m[33m)[m feat: add GET /sessions/{id}/state endpoint for network-drop recovery
+[33m176f21a[m[33m ([m[1;31morigin/feature/interview-lifecycle-refactor[m[33m)[m feat: introduce InterviewQuestionDto to return clean, metadata-only session questions to frontend
+[33mce63303[m[33m ([m[1;31morigin/feature/issue-41-feedback-report[m[33m)[m Feed Back Report Feat
+[33m9edcf38[m[33m ([m[1;31morigin/feat/session[m[33m)[m fix: double flushing
+[33m24f4880[m feat: session checkpointing with resume endpoint
+[33m10bd964[m[33m ([m[1;31morigin/feature/issue-39-40-session-question-answer-scoring[m[33m, [m[1;31morigin/clean-session-feature[m[33m)[m refactor: use LLM for question generation, wire audioUrl, cleanup dead code
+[33mcc9398d[m fix(#39,#40): resolve PR review issues + feat(#38): session management

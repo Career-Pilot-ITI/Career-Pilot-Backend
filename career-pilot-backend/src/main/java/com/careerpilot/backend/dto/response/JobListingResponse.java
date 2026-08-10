@@ -38,6 +38,9 @@ public class JobListingResponse {
   private String sourceType;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
+  private String companyLogoUrl;
+  private String postedLabel;
+  private String applicantsLabel;
 
   public static JobListingResponse from(JobListing j) {
     if (j == null)
@@ -65,6 +68,9 @@ public class JobListingResponse {
         .sourceType(j.getSourceType() != null ? j.getSourceType().name() : null)
         .createdAt(j.getCreatedAt())
         .updatedAt(j.getUpdatedAt())
+        .companyLogoUrl(j.getCompanyLogoUrl())
+        .postedLabel(j.getPostedLabel())
+        .applicantsLabel(j.getApplicantsLabel())
         .build();
   }
 }
