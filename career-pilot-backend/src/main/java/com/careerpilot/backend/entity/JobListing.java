@@ -156,6 +156,7 @@ public class JobListing {
      * source type are set by the caller.
      */
     public static JobListing fromChocoData(ChocoDataJobResponse r, User user, String sourceUrl) {
+        ParsedSalary salary = parseSalary(r.salary());
         return JobListing.builder()
                 .user(user)
                 .title(r.title())
@@ -167,6 +168,10 @@ public class JobListing {
                 .requiredSkills(new ArrayList<>())
                 .preferredSkills(new ArrayList<>())
                 .technologies(new ArrayList<>())
+                .salaryMin(salary.min())
+                .salaryMax(salary.max())
+                .currency(salary.currency())
+                .applicationUrl(r.url())
                 .companyLogoUrl(r.companyLogo())
                 .postedLabel(r.postedLabel())
                 .applicantsLabel(r.applicants())
@@ -183,6 +188,37 @@ public class JobListing {
             case "CONTRACT", "CONTRACTOR" -> "CONTRACT";
             case "INTERNSHIP", "INTERN" -> "INTERNSHIP";
             default -> raw;
+        };
+    }
+    private static final java.util.regex.Pattern SALARY_PATTERN = java.util.regex.Pattern.compile(
+            "([€$£])?\\s?([\\d,]+)(?:\\s*-\\s*([€$£])?\\s?([\\d,]+))?");
+
+    private record ParsedSalary(Integer min, Integer max, String currency) {}
+
+    private static ParsedSalary parseSalary(Object raw) {
+        if (!(raw instanceof String s) || s.isBlank()) return new ParsedSalary(null, null, null);
+        var m = SALARY_PATTERN.matcher(s);
+        if (!m.find()) return new ParsedSalary(null, null, null);
+
+        Integer min = parseAmount(m.group(2));
+        Integer max = m.group(4) != null ? parseAmount(m.group(4)) : min;
+        String currency = symbolToCurrency(m.group(1) != null ? m.group(1) : m.group(3));
+        return new ParsedSalary(min, max, currency);
+    }
+
+    private static Integer parseAmount(String digits) {
+        if (digits == null) return null;
+        try { return Integer.parseInt(digits.replace(",", "")); }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private static String symbolToCurrency(String symbol) {
+        if (symbol == null) return null;
+        return switch (symbol) {
+            case "$" -> "USD";
+            case "€" -> "EUR";
+            case "£" -> "GBP";
+            default -> null;
         };
     }
 }
