@@ -20,6 +20,6 @@ public record ChocoDataJobResponse(
         String description,
         @JsonProperty("description_html") String descriptionHtml,
         @JsonProperty("company_logo") String companyLogo,
-        String applicants
+        @JsonProperty("applicants") String applicants
 ) {
 }
