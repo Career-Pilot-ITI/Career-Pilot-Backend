@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.controller.response.TrackResponse;
 import com.careerpilot.backend.dto.request.CreateTrackRequest;
 import com.careerpilot.backend.dto.request.UpdateTrackRequest;
@@ -38,7 +39,7 @@ public class TrackService implements ITrackService {
   public TrackResponse findById(Long id) {
     log.debug("Finding track with ID: {}", id);
     return trackRepository.findById(id).map(TrackResponse::from)
-        .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + id));
   }
 
   @Override
@@ -69,7 +70,7 @@ public class TrackService implements ITrackService {
   public TrackResponse update(Long id, UpdateTrackRequest request) {
     log.debug("Updating track with ID: {}", id);
     Track track = trackRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + id));
     if (request.name() != null) track.setName(request.name());
     if (request.description() != null) track.setDescription(request.description());
     if (request.active() != null) track.setIsActive(request.active());
@@ -87,7 +88,7 @@ public class TrackService implements ITrackService {
   public void deactivate(Long id) {
     log.debug("Deactivating track with ID: {}", id);
     Track track = trackRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + id));
     track.setIsActive(false);
     trackRepository.save(track);
     embeddingIndexService.removeTrack(track.getId());
@@ -98,7 +99,7 @@ public class TrackService implements ITrackService {
   public void activate(Long id) {
     log.debug("Activating track with ID: {}", id);
     Track track = trackRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + id));
     track.setIsActive(true);
     trackRepository.save(track);
     embeddingIndexService.indexTrack(track);
@@ -109,7 +110,7 @@ public class TrackService implements ITrackService {
   public void delete(Long id) {
     log.debug("Deleting track with ID: {}", id);
     Track track = trackRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Track not found with ID: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + id));
     if (track.getQuestions() != null && !track.getQuestions().isEmpty()) {
       throw new RuntimeException("Cannot delete track with existing questions");
     }

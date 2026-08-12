@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
 import com.careerpilot.backend.dto.response.InterviewQuestionDto;
@@ -91,7 +92,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     }
 
     User user = userRepository.findById(userId)
-        .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     int maxQuestions = request.getQuestionCount() != null ? request.getQuestionCount() : 10;
 
     InterviewSession session = InterviewSession.builder()
@@ -146,7 +147,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     log.info("Submitting answer for session: {}, user: {}", sessionId, userId);
 
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-        .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+        .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
     if (session.getStatus() != SessionStatus.IN_PROGRESS) {
       throw new IllegalStateException(
@@ -313,7 +314,7 @@ public class InterviewSessionService implements IInterviewSessionService {
   @Transactional(readOnly = true)
   public SessionStateResponse getSessionState(Long sessionId, Long userId) {
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-        .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+        .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
     List<SessionQuestion> questions = sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
 
@@ -364,7 +365,7 @@ public class InterviewSessionService implements IInterviewSessionService {
   @Transactional(readOnly = true)
   public InterviewSessionResponse getSession(Long sessionId, Long userId) {
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-        .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+        .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
     return toSessionResponse(session);
   }
 
@@ -460,7 +461,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     if (workspaceId == null)
       return null;
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
     return workspace.getJob();
   }
 
@@ -490,7 +491,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     if (workspaceId == null)
       return;
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
     workspace.setLastInterviewSession(session);
     jobWorkspaceRepository.save(workspace);
   }

@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.dto.request.CreateQuestionRequest;
 import com.careerpilot.backend.dto.request.UpdateQuestionRequest;
 import com.careerpilot.backend.dto.response.QuestionResponse;
@@ -43,7 +44,7 @@ public class QuestionBankService implements IQuestionBankService {
 
         // Validate track exists
         Track track = trackRepository.findById(request.getTrackId())
-                .orElseThrow(() -> new RuntimeException("Track not found with ID: " + request.getTrackId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + request.getTrackId()));
 
         // Validate difficulty level
         validateDifficultyLevel(request.getDifficultyLevel());
@@ -76,7 +77,7 @@ public class QuestionBankService implements IQuestionBankService {
         log.info("Fetching question with ID: {}", id);
 
         QuestionBank question = questionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Question not found with ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Question not found with ID: " + id));
 
         return mapToResponse(question);
     }
@@ -108,7 +109,7 @@ public class QuestionBankService implements IQuestionBankService {
 
         // Validate track exists
         trackRepository.findById(trackId)
-                .orElseThrow(() -> new RuntimeException("Track not found with ID: " + trackId));
+                .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + trackId));
 
         return questionRepository.findByTrackId(trackId).stream()
                 .map(this::mapToResponse)
@@ -122,7 +123,7 @@ public class QuestionBankService implements IQuestionBankService {
 
         // Validate track exists
         trackRepository.findById(trackId)
-                .orElseThrow(() -> new RuntimeException("Track not found with ID: " + trackId));
+                .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + trackId));
 
         return questionRepository.findByTrackId(trackId, pageable)
                 .map(this::mapToResponse);
@@ -206,7 +207,7 @@ public class QuestionBankService implements IQuestionBankService {
         log.info("Updating question with ID: {}", id);
 
         QuestionBank question = questionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Question not found with ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Question not found with ID: " + id));
 
         // Validate difficulty level
         validateDifficultyLevel(request.getDifficultyLevel());
@@ -242,7 +243,7 @@ public class QuestionBankService implements IQuestionBankService {
         log.info("Toggling status for question with ID: {}", id);
 
         QuestionBank question = questionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Question not found with ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Question not found with ID: " + id));
 
         question.setIsActive(!question.getIsActive());
         question.setUpdatedAt(LocalDateTime.now());
@@ -265,7 +266,7 @@ public class QuestionBankService implements IQuestionBankService {
         log.info("Deleting question with ID: {}", id);
 
         if (!questionRepository.existsById(id)) {
-            throw new RuntimeException("Question not found with ID: " + id);
+            throw new ResourceNotFoundException("Question not found with ID: " + id);
         }
 
         questionRepository.deleteById(id);
@@ -279,7 +280,7 @@ public class QuestionBankService implements IQuestionBankService {
 
         // Validate track exists
         trackRepository.findById(trackId)
-                .orElseThrow(() -> new RuntimeException("Track not found with ID: " + trackId));
+                .orElseThrow(() -> new ResourceNotFoundException("Track not found with ID: " + trackId));
 
         List<QuestionBank> questions = questionRepository.findByTrackId(trackId);
         questionRepository.deleteAll(questions);
