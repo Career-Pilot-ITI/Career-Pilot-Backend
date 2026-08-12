@@ -1,6 +1,7 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.JobScrapeException;
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.dto.request.ImportJobTextRequest;
 import com.careerpilot.backend.dto.request.ImportJobUrlRequest;
 import com.careerpilot.backend.dto.response.ChocoDataJobResponse;
@@ -48,7 +49,7 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
   @Transactional
   public JobWorkspaceResponse importFromText(Long userId, ImportJobTextRequest request) {
     User user = userRepository.findById(userId)
-        .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     Optional<JobListing> jobListing = jobListingRepository.findBySourceUrl(request.getSourceUrl());
     JobListing job;
     if (jobListing.isPresent()) {
@@ -66,7 +67,7 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
   @Transactional
   public JobWorkspaceResponse importFromUrl(Long userId, ImportJobUrlRequest request) {
     User user = userRepository.findById(userId)
-        .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     Optional<JobListing> jobListing = jobListingRepository.findBySourceUrl(request.getUrl());
     JobListing job;
     if (jobListing.isPresent()) {
@@ -101,7 +102,7 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
   @Transactional(readOnly = true)
   public JobWorkspaceResponse getWorkspace(Long id, Long userId) {
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(id, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + id));
     return JobWorkspaceResponse.from(workspace);
   }
 
@@ -109,7 +110,7 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
   @Transactional
   public void deleteWorkspace(Long id, Long userId) {
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(id, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + id));
     jobWorkspaceRepository.delete(workspace);
   }
 
@@ -117,7 +118,7 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
   @Transactional
   public JobWorkspaceResponse updateStatus(Long id, Long userId, JobWorkspaceStatus status) {
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(id, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + id));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + id));
     workspace.setStatus(status);
     workspace = jobWorkspaceRepository.save(workspace);
     return JobWorkspaceResponse.from(workspace);

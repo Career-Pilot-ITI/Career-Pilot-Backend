@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 
 @ControllerAdvice
 @Order(0)
@@ -24,21 +23,12 @@ public class PaymentExceptionHandler {
 
     @ExceptionHandler(PaymentException.UnsupportedPaymentProviderException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnsupportedProvider(PaymentException.UnsupportedPaymentProviderException ex) {
-        return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+        return buildResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(PaymentException.PaymentProviderException.class)
     public ResponseEntity<ApiResponse<Void>> handleProviderFailure(PaymentException.PaymentProviderException ex) {
         return buildResponse(ex.getMessage(), HttpStatus.BAD_GATEWAY);
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidationErrors(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(err -> err.getField() + ": " + err.getDefaultMessage())
-                .reduce((a, b) -> a + "; " + b)
-                .orElse("Validation failed");
-        return buildResponse(message, HttpStatus.BAD_REQUEST);
     }
 
     private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {

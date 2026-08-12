@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
 import com.careerpilot.backend.entity.QuestionScore;
@@ -30,7 +31,7 @@ public class SessionQuestionService implements ISessionQuestionService {
     @Transactional(readOnly = true)
     public List<SessionQuestionResponse> getSessionQuestions(Long sessionId, Long userId) {
         sessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
         List<SessionQuestion> questions =
                 questionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
@@ -51,10 +52,10 @@ public class SessionQuestionService implements ISessionQuestionService {
     @Transactional(readOnly = true)
     public SessionQuestionResponse getSessionQuestion(Long sessionId, Long questionId, Long userId) {
         sessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
         SessionQuestion sq = questionRepository.findByIdAndSessionId(questionId, sessionId)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Question " + questionId + " not found in session " + sessionId));
 
         QuestionScore score = scoreRepository.findBySessionQuestionId(sq.getId()).orElse(null);
