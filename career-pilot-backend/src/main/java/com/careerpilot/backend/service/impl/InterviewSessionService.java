@@ -1,7 +1,9 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.dto.request.StartSessionRequest;
 import com.careerpilot.backend.dto.request.SubmitAnswerRequest;
+import com.careerpilot.backend.dto.response.GeneratedQuestion;
 import com.careerpilot.backend.dto.response.InterviewQuestionDto;
 import com.careerpilot.backend.dto.response.InterviewSessionResponse;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
@@ -43,7 +45,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -91,7 +96,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     }
 
     User user = userRepository.findById(userId)
-        .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     int maxQuestions = request.getQuestionCount() != null ? request.getQuestionCount() : 10;
 
     InterviewSession session = InterviewSession.builder()
@@ -146,7 +151,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     log.info("Submitting answer for session: {}, user: {}", sessionId, userId);
 
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-        .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+        .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
     if (session.getStatus() != SessionStatus.IN_PROGRESS) {
       throw new IllegalStateException(
@@ -221,8 +226,9 @@ public class InterviewSessionService implements IInterviewSessionService {
     boolean capReached = answeredCount >= maxQs;
 
     AgentResponse agentResponse = null;
+    List<SessionQuestion> history = sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
     try {
-      List<SessionQuestion> history = sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
+      List<Long> usedBankQuestionIds = usedQuestionBankIds(history);
 
       agentResponse = interviewAgentService.processTurn(
           userId, sessionId,
@@ -235,7 +241,8 @@ public class InterviewSessionService implements IInterviewSessionService {
           findWorkspaceJob(sessionId),
           history,
           answeredCount, maxQs,
-          (int) clientElapsed, targetSecs);
+          (int) clientElapsed, targetSecs,
+          usedBankQuestionIds, null);
     } catch (Exception e) {
       log.error("Agent processing failed for session {}: {}", sessionId, e.getMessage());
     }
@@ -276,6 +283,28 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     boolean shouldEnd = timeUp || capReached || "READY_TO_COMPLETE".equals(agentResponse.getSessionStatus());
 
+    if (!shouldEnd && agentResponse.getNextQuestion() != null && !agentResponse.getNextQuestion().isBlank()
+        && isDuplicateQuestion(agentResponse, history)) {
+      GeneratedQuestion replacement = interviewAgentService.regenerateQuestion(
+          userId, session.getTrack().getId(), session.getTrack().getName(), session.getTrack().getDescription(),
+          findWorkspaceJob(sessionId), history, usedQuestionBankIds(history), agentResponse.getNextQuestion());
+      if (replacement != null && replacement.text() != null && !replacement.text().isBlank()
+          && !isDuplicateText(replacement.text(), history)) {
+        agentResponse.setNextQuestion(replacement.text());
+        agentResponse.setSourceQuestionId(
+            isUsedBankQuestion(replacement.sourceQuestionId(), history) ? null : replacement.sourceQuestionId());
+      } else {
+        QuestionBank fallback = pickUnusedBankQuestion(session.getTrack().getId(), history);
+        if (fallback != null) {
+          agentResponse.setNextQuestion(fallback.getQuestionText());
+          agentResponse.setSourceQuestionId(fallback.getId());
+        } else {
+          agentResponse.setNextQuestion(null);
+          agentResponse.setSourceQuestionId(null);
+        }
+      }
+    }
+
     InterviewQuestionDto nextQuestion = null;
     if (!shouldEnd && agentResponse.getNextQuestion() != null && !agentResponse.getNextQuestion().isBlank()) {
       QuestionBank sourceQ = resolveSourceQuestion(agentResponse.getSourceQuestionId());
@@ -290,6 +319,7 @@ public class InterviewSessionService implements IInterviewSessionService {
       nextQuestion = toQuestionResponse(savedNext);
       log.info("Agent generated Q#{} for session {}", answeredCount + 1, sessionId);
     } else {
+      shouldEnd = true;
       log.info("Session {} ready to complete.", sessionId);
     }
 
@@ -313,7 +343,7 @@ public class InterviewSessionService implements IInterviewSessionService {
   @Transactional(readOnly = true)
   public SessionStateResponse getSessionState(Long sessionId, Long userId) {
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-        .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+        .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
     List<SessionQuestion> questions = sessionQuestionRepository.findBySessionIdOrderByQuestionOrderAsc(sessionId);
 
@@ -364,7 +394,7 @@ public class InterviewSessionService implements IInterviewSessionService {
   @Transactional(readOnly = true)
   public InterviewSessionResponse getSession(Long sessionId, Long userId) {
     InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-        .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+        .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
     return toSessionResponse(session);
   }
 
@@ -460,7 +490,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     if (workspaceId == null)
       return null;
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
     return workspace.getJob();
   }
 
@@ -490,7 +520,7 @@ public class InterviewSessionService implements IInterviewSessionService {
     if (workspaceId == null)
       return;
     JobWorkspace workspace = jobWorkspaceRepository.findByIdAndUserId(workspaceId, userId)
-        .orElseThrow(() -> new RuntimeException("Workspace not found: " + workspaceId));
+        .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
     workspace.setLastInterviewSession(session);
     jobWorkspaceRepository.save(workspace);
   }
@@ -499,5 +529,68 @@ public class InterviewSessionService implements IInterviewSessionService {
     return jobWorkspaceRepository.findByLastInterviewSessionId(sessionId)
         .map(JobWorkspace::getJob)
         .orElse(null);
+  }
+
+  private List<Long> usedQuestionBankIds(List<SessionQuestion> history) {
+    if (history == null) {
+      return List.of();
+    }
+    return history.stream()
+        .map(q -> q.getQuestion() != null ? q.getQuestion().getId() : null)
+        .filter(Objects::nonNull)
+        .collect(Collectors.toList());
+  }
+
+  private static String normalizeQuestionText(String text) {
+    if (text == null) {
+      return "";
+    }
+    return text.toLowerCase().replaceAll("[^a-z0-9]+", " ").trim();
+  }
+
+  private boolean isDuplicateText(String candidate, List<SessionQuestion> history) {
+    String norm = normalizeQuestionText(candidate);
+    if (norm.isEmpty()) {
+      return false;
+    }
+    return history.stream()
+        .map(SessionQuestion::getQuestionText)
+        .filter(Objects::nonNull)
+        .anyMatch(t -> normalizeQuestionText(t).equals(norm));
+  }
+
+  private boolean isUsedBankQuestion(Long bankId, List<SessionQuestion> history) {
+    if (bankId == null) {
+      return false;
+    }
+    Long id = bankId;
+    return history.stream()
+        .map(q -> q.getQuestion() != null ? q.getQuestion().getId() : null)
+        .filter(Objects::nonNull)
+        .anyMatch(id::equals);
+  }
+
+  private boolean isDuplicateQuestion(AgentResponse response, List<SessionQuestion> history) {
+    return isDuplicateText(response.getNextQuestion(), history)
+        || isUsedBankQuestion(response.getSourceQuestionId(), history);
+  }
+
+  private QuestionBank pickUnusedBankQuestion(Long trackId, List<SessionQuestion> history) {
+    if (trackId == null) {
+      return null;
+    }
+    List<QuestionBank> bank = questionBankRepository.findByTrackIdAndIsActiveTrue(trackId);
+    if (bank.isEmpty()) {
+      return null;
+    }
+    Set<Long> used = usedQuestionBankIds(history).stream().collect(Collectors.toSet());
+    List<QuestionBank> available = bank.stream()
+        .filter(q -> !used.contains(q.getId()))
+        .collect(Collectors.toList());
+    if (available.isEmpty()) {
+      return null;
+    }
+    Collections.shuffle(available);
+    return available.get(0);
   }
 }

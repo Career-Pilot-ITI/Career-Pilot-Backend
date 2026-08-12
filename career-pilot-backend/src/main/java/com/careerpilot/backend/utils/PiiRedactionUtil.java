@@ -24,10 +24,10 @@ public class PiiRedactionUtil {
           Pattern.compile("https?://[\\w\\-]+(\\.[\\w\\-]+)+(/[^\\s]*)?")),
 
       new PiiPattern("phone-eg",
-          Pattern.compile("\\+20\\s?1[0125]\\d{8}")),
+          Pattern.compile("\\+20[\\s.-]?1[0125](?:[\\s.-]?\\d){8}")),
 
       new PiiPattern("phone-intl",
-          Pattern.compile("\\+[1-9]\\d{1,14}")),
+          Pattern.compile("\\+[1-9](?:[\\s.-]?\\d){7,14}")),
 
       new PiiPattern("ipv4",
           Pattern.compile("\\b((25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\b")),

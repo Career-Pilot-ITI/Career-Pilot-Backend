@@ -1,5 +1,6 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.dto.response.FeedbackReportResponse;
 import com.careerpilot.backend.dto.response.QuestionScoreResponse;
 import com.careerpilot.backend.dto.response.SessionQuestionResponse;
@@ -56,7 +57,7 @@ public class FeedbackReportService implements IFeedbackReportService {
         log.info("GET /feedback called for session: {}, user: {}", sessionId, userId);
 
         InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new RuntimeException("Session not found or access denied: " + sessionId));
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found or access denied: " + sessionId));
 
         if (session.getStatus() == SessionStatus.ABANDONED) {
             throw new IllegalStateException("Cannot generate feedback for an abandoned session.");

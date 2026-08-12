@@ -103,14 +103,14 @@ public class InterviewAgentService {
             if (text == null || text.isBlank()) {
                 return fallbackFirstQuestion(trackName);
             }
-            return new com.careerpilot.backend.dto.response.GeneratedQuestion(text, sourceId);
+            return new GeneratedQuestion(text, sourceId);
         } catch (Exception e) {
             log.warn("Failed to parse first question response: {}", response, e);
             return fallbackFirstQuestion(trackName);
         }
     }
 
-    private com.careerpilot.backend.dto.response.GeneratedQuestion fallbackFirstQuestion(String trackName) {
+    private GeneratedQuestion fallbackFirstQuestion(String trackName) {
         String[] fallbacks = {
             "Can you describe a complex %s problem you solved and how you approached it?",
             "What's your approach to designing a %s system from scratch?",
@@ -119,7 +119,7 @@ public class InterviewAgentService {
             "Describe a %s project where you had to balance quality with delivery speed."
         };
         String q = fallbacks[(int) (Math.random() * fallbacks.length)].formatted(trackName);
-        return new com.careerpilot.backend.dto.response.GeneratedQuestion(q, null);
+        return new GeneratedQuestion(q, null);
     }
 
     @RateLimit
@@ -131,12 +131,15 @@ public class InterviewAgentService {
             JobListing job,
             List<SessionQuestion> history,
             int questionsAsked, int maxQuestions,
-            int elapsedSeconds, int targetDurationSeconds
+            int elapsedSeconds, int targetDurationSeconds,
+            List<Long> usedQuestionBankIds,
+            String extraInstruction
     ) {
         String cvContext = buildCvContext(userId);
         String pastPerformance = buildUserHistoryContext(userId);
         String questionBankContext = buildQuestionBankContext(trackId, currentQuestionText + "\n" + (transcript != null ? transcript : ""));
         String historyText = buildHistoryText(history);
+        String askedContext = buildAskedQuestionContext(history, usedQuestionBankIds);
         String idealAnswerKeywords = buildIdealAnswerKeywords(currentQuestionBankId);
         String jobContext = buildJobContext(job);
 
@@ -157,6 +160,12 @@ public class InterviewAgentService {
                 Then decide: if the answer was shallow or incomplete, generate a probing follow-up.
                 If the answer was thorough, move to a new topic.
                 If the session is complete, signal that.
+                
+                When generating the next question you MUST follow these rules:
+                - NEVER repeat a question that has already been asked in this session, even if rephrased or reworded.
+                - NEVER reuse a question bank question whose ID appears in the "already asked" list.
+                - Each new question must target a DIFFERENT skill or knowledge area than every earlier question.
+                - If you are about to ask something similar to an earlier question, switch topic instead.
                 
                 After using the tools, produce your final response as raw JSON with this exact format:
                 {"scores":{"contentRelevance":0,"clarity":0,"confidence":0,"fillerWords":0,"reasoning":""},"nextQuestion":"","sourceQuestionId":null,"coachingTip":"","sessionStatus":"IN_PROGRESS"}
@@ -189,9 +198,13 @@ public class InterviewAgentService {
                 Conversation history:
                 %s
                 
+                Questions already asked in this session — DO NOT repeat any of these, even rephrased:
+                %s
+                
                 Candidate's latest answer: %s
                 
                 Session progress: %d of %d questions asked, %d of %d seconds elapsed.
+                %s
                 
                 Evaluate, decide, and respond.
                 """.formatted(trackName,
@@ -200,8 +213,12 @@ public class InterviewAgentService {
                 currentQuestionText,
                 idealAnswerKeywords != null ? idealAnswerKeywords : "General best practices",
                 historyText,
+                askedContext,
                 transcript != null ? transcript : "[No answer provided]",
-                questionsAsked, maxQuestions, elapsedSeconds, targetDurationSeconds);
+                questionsAsked, maxQuestions, elapsedSeconds, targetDurationSeconds,
+                extraInstruction != null && !extraInstruction.isBlank()
+                        ? "Extra instruction: " + extraInstruction
+                        : "");
 
         log.info("Agent processing turn for session {} (Q#{}/{}", sessionId, questionsAsked, maxQuestions);
 
@@ -256,6 +273,81 @@ public class InterviewAgentService {
         } catch (Exception e) {
             log.warn("Failed to parse agent response: {}", response, e);
             return AgentResponse.fallback(questionText);
+        }
+    }
+
+    @RateLimit
+    @RedactPii
+    public GeneratedQuestion regenerateQuestion(
+            Long userId, Long trackId, String trackName, String trackDescription,
+            JobListing job,
+            List<SessionQuestion> history,
+            List<Long> usedQuestionBankIds,
+            String duplicateQuestion
+    ) {
+        if (duplicateQuestion == null || duplicateQuestion.isBlank()) {
+            return null;
+        }
+        String cvContext = buildCvContext(userId);
+        String questionBankContext = buildQuestionBankContext(trackId, trackName);
+        String jobContext = buildJobContext(job);
+        String askedContext = buildAskedQuestionContext(history, usedQuestionBankIds);
+
+        String prompt = """
+                Track: %s
+                Track Objective: %s
+
+                Candidate CV (use ONLY to calibrate difficulty and communication style):
+                %s
+
+                %s
+
+                Question Bank Reference:
+                %s
+
+                The previous question "%s" was already asked in this session.
+
+                STRICT RULES:
+                - Generate a COMPLETELY DIFFERENT question about the "%s" track.
+                - It must NOT be the previous question above, and must NOT be any question that was already asked (see the asked list).
+                - It must cover a NEW skill or knowledge area not covered by any earlier question.
+                - Do not rephrase, tweak, or slightly modify any already-asked question.
+                - Do not reuse a question bank question whose ID is in the used list.
+                - Keep it concrete, specific, and at an appropriate difficulty for the candidate.
+
+                You may use searchQuestionBank / searchWeb to find an unused question.
+
+                Return ONLY raw JSON: {"text": "your question here", "sourceQuestionId": null}
+                """.formatted(trackName,
+                trackDescription != null ? trackDescription : "Assess the candidate's skills for this track",
+                cvContext, jobContext, questionBankContext, duplicateQuestion, trackName);
+
+        log.info("Agent regenerating a non-repeating question for track: {}", trackName);
+
+        String response = chatClient.prompt()
+                .system("You are Career Pilot AI — an expert interviewer. Re-generate a question that has NOT "
+                        + "already been asked in this session. Never repeat any question from the asked list, "
+                        + "even rephrased. "
+                        + "Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.")
+                .user(prompt)
+                .tools(interviewTools)
+                .call()
+                .content();
+
+        try {
+            assert response != null;
+            String cleaned = response.replaceAll("```(?:json)?\\s*", "").trim();
+            JsonNode root = objectMapper.readTree(cleaned);
+            String text = getString(root, "text");
+            Long sourceId = root.has("sourceQuestionId") && !root.get("sourceQuestionId").isNull()
+                    ? root.get("sourceQuestionId").asLong() : null;
+            if (text == null || text.isBlank()) {
+                return null;
+            }
+            return new GeneratedQuestion(text, sourceId);
+        } catch (Exception e) {
+            log.warn("Failed to parse regenerated question response: {}", response, e);
+            return null;
         }
     }
 
@@ -360,6 +452,23 @@ public class InterviewAgentService {
         for (SessionQuestion sq : history) {
             sb.append("Q: ").append(sq.getQuestionText()).append("\n");
             sb.append("A: ").append(sq.getUserTranscript() != null ? sq.getUserTranscript() : "[skipped]").append("\n\n");
+        }
+        return sb.toString();
+    }
+
+    private String buildAskedQuestionContext(List<SessionQuestion> history, List<Long> usedQuestionBankIds) {
+        StringBuilder sb = new StringBuilder();
+        if (history == null || history.isEmpty()) {
+            sb.append("None yet.\n");
+        } else {
+            for (SessionQuestion sq : history) {
+                if (sq.getQuestionText() != null) {
+                    sb.append("- ").append(sq.getQuestionText()).append("\n");
+                }
+            }
+        }
+        if (usedQuestionBankIds != null && !usedQuestionBankIds.isEmpty()) {
+            sb.append("Question bank IDs already used: ").append(usedQuestionBankIds).append("\n");
         }
         return sb.toString();
     }

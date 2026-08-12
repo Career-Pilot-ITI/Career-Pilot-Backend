@@ -1,4 +1,6 @@
 package com.careerpilot.backend.dto.request;
 
-public record CreateTrackRequest(String name, String description) {
+import jakarta.validation.constraints.NotBlank;
+
+public record CreateTrackRequest(@NotBlank(message = "name is required") String name, String description) {
 }
