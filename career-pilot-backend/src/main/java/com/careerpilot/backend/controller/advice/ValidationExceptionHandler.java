@@ -88,6 +88,6 @@ public class ValidationExceptionHandler {
   }
 
   private ResponseEntity<ApiResponse<Void>> build(String message) {
-    return new ResponseEntity<>(new ApiResponse(message), HttpStatus.BAD_REQUEST);
+    return new ResponseEntity<>(ApiResponse.error(message), HttpStatus.BAD_REQUEST);
   }
 }

@@ -56,6 +56,10 @@ public class JobWorkspaceServiceImpl implements IJobWorkspaceService {
       job = jobListing.get();
     } else {
       JobDraft draft = parseWithEntitlement(userId, request.getDescriptionText());
+      if (draft.title() == null || draft.title().isBlank()) {
+        throw new JobScrapeException.InvalidParamsException(
+            "Couldn't parse a job from the provided text. Make sure it is a full job description.");
+      }
 
       job = JobListing.fromDraft(draft, user, JobSourceType.MANUAL_TEXT, request.getSourceUrl());
       job = jobListingRepository.save(job);

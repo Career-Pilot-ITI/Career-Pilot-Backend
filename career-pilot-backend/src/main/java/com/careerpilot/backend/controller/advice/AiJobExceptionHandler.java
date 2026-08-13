@@ -13,6 +13,6 @@ public class AiJobExceptionHandler {
 
   @ExceptionHandler(AiJobException.AiJobNotFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleAiJobNotFound(AiJobException.AiJobNotFoundException ex) {
-    return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.NOT_FOUND);
+    return new ResponseEntity<>(ApiResponse.error(ex.getMessage()), HttpStatus.NOT_FOUND);
   }
 }

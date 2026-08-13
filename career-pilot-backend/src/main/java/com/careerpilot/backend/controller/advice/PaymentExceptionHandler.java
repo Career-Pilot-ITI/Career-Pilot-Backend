@@ -32,6 +32,6 @@ public class PaymentExceptionHandler {
     }
 
     private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {
-        return new ResponseEntity<>(new ApiResponse(message), status);
+        return new ResponseEntity<>(ApiResponse.error(message), status);
     }
 }

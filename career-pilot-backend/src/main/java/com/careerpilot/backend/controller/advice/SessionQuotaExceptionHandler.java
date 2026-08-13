@@ -13,6 +13,6 @@ public class SessionQuotaExceptionHandler {
 
     @ExceptionHandler(SessionQuotaException.QuotaExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleQuotaExceeded(SessionQuotaException.QuotaExceededException ex) {
-        return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.TOO_MANY_REQUESTS);
+        return new ResponseEntity<>(ApiResponse.error(ex.getMessage()), HttpStatus.TOO_MANY_REQUESTS);
     }
 }

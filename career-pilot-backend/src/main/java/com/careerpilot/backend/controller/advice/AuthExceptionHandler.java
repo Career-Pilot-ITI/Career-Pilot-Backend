@@ -76,7 +76,6 @@ public class AuthExceptionHandler {
   }
 
   private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {
-    ApiResponse apiResponse = new ApiResponse(message);
-    return new ResponseEntity<>(apiResponse, status);
+    return new ResponseEntity<>(ApiResponse.error(message), status);
   }
 }

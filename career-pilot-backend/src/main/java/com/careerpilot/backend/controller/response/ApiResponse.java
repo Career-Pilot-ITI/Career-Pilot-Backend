@@ -23,6 +23,14 @@ public class ApiResponse<T> {
         this.timestamp = LocalDateTime.now();
     }
 
+    public static <T> ApiResponse<T> error(String message) {
+        ApiResponse<T> response = new ApiResponse<>();
+        response.setMessage(message);
+        response.setSuccess(false);
+        response.setTimestamp(LocalDateTime.now());
+        return response;
+    }
+
     public static ApiResponseBuilder builder() {
         return new ApiResponseBuilder();
     }

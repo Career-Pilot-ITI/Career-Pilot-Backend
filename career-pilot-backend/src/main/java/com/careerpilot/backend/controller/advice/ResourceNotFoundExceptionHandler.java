@@ -13,6 +13,6 @@ public class ResourceNotFoundExceptionHandler {
 
   @ExceptionHandler(ResourceNotFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleNotFound(ResourceNotFoundException ex) {
-    return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.NOT_FOUND);
+    return new ResponseEntity<>(ApiResponse.error(ex.getMessage()), HttpStatus.NOT_FOUND);
   }
 }

@@ -13,16 +13,16 @@ public class WorkspaceExceptionHandler {
 
   @ExceptionHandler(SessionQuotaException.QuotaExceededException.class)
   public ResponseEntity<ApiResponse<Void>> handleQuotaExceeded(SessionQuotaException.QuotaExceededException ex) {
-    return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.TOO_MANY_REQUESTS);
+    return new ResponseEntity<>(ApiResponse.error(ex.getMessage()), HttpStatus.TOO_MANY_REQUESTS);
   }
 
   @ExceptionHandler(WorkspaceException.WorkspaceNotFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleWorkspaceNotFound(WorkspaceException.WorkspaceNotFoundException ex) {
-    return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.NOT_FOUND);
+    return new ResponseEntity<>(ApiResponse.error(ex.getMessage()), HttpStatus.NOT_FOUND);
   }
 
   @ExceptionHandler(WorkspaceException.CvNotFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleCvNotFound(WorkspaceException.CvNotFoundException ex) {
-    return new ResponseEntity<>(new ApiResponse(ex.getMessage()), HttpStatus.BAD_REQUEST);
+    return new ResponseEntity<>(ApiResponse.error(ex.getMessage()), HttpStatus.BAD_REQUEST);
   }
 }
