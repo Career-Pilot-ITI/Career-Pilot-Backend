@@ -45,7 +45,6 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/v1/subscriptions/tiers").permitAll()
                         .requestMatchers("/api/v1/interviews/sessions/price").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 // .oauth2Login(oauth2 -> oauth2
