@@ -1,6 +1,7 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.WalletException;
+import com.careerpilot.backend.controller.advice.ResourceNotFoundException;
 import com.careerpilot.backend.controller.response.UserFileResponse;
 import com.careerpilot.backend.controller.response.UserProfileResponse;
 import com.careerpilot.backend.dto.request.UpdateProfileRequest;
@@ -84,7 +85,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
     userRepository.save(user);
 
     UserProfile profile = profileRepository.findByUserId(userId)
-        .orElseThrow(() -> new RuntimeException("User profile not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
 
     if (request.getDisplayName() != null)
       profile.setDisplayName(request.getDisplayName());
@@ -107,7 +108,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
       profile.setAvatarUrl(request.getAvatarUrl());
     } else if (request.getAvatarFileId() != null) {
       UserFile avatarFile = fileRepository.findByIdAndUserId(request.getAvatarFileId(), userId)
-          .orElseThrow(() -> new RuntimeException("Avatar file not found or does not belong to you"));
+          .orElseThrow(() -> new ResourceNotFoundException("Avatar file not found or does not belong to you"));
       profile.setAvatarUrl(avatarFile.getStoredPath());
     }
 
@@ -115,7 +116,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
       profile.setCvUrl(request.getCvUrl());
     } else if (request.getCvFileId() != null) {
       UserFile cvFile = fileRepository.findByIdAndUserId(request.getCvFileId(), userId)
-          .orElseThrow(() -> new RuntimeException("CV file not found or does not belong to you"));
+          .orElseThrow(() -> new ResourceNotFoundException("CV file not found or does not belong to you"));
       profile.setCvUrl(cvFile.getStoredPath());
     }
     if (request.getTargetCompanies() != null)
@@ -132,8 +133,10 @@ public class UserProfileServiceImpl implements IUserProfileService {
       profile.setOnboardingCompleted(request.getOnboardingCompleted());
     if (request.getTrackId() != null) {
       var track = entityManager.find(com.careerpilot.backend.entity.Track.class, request.getTrackId());
-      if (track != null)
-        profile.setTrack(track);
+      if (track == null) {
+        throw new ResourceNotFoundException("Track not found with id: " + request.getTrackId());
+      }
+      profile.setTrack(track);
     }
     profile.setUpdatedAt(LocalDateTime.now());
 
@@ -150,7 +153,7 @@ public class UserProfileServiceImpl implements IUserProfileService {
   @Transactional(readOnly = true)
   public UserProfileResponse getProfile(Long userId) {
     UserProfile profile = profileRepository.findByUserId(userId)
-        .orElseThrow(() -> new RuntimeException("User profile not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
     return buildProfileResponse(profile, userId);
   }
 

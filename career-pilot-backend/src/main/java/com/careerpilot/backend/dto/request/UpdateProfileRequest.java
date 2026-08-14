@@ -1,6 +1,7 @@
 package com.careerpilot.backend.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -19,6 +20,7 @@ public class UpdateProfileRequest {
     @Schema(example = "amr.shams@example.com")
     private String email;
 
+    @Size(max = 255, message = "displayName must be at most 255 characters")
     @Schema(example = "Amr Shams")
     private String displayName;
 
@@ -35,18 +37,22 @@ public class UpdateProfileRequest {
     @Schema(example = "1998-05-15")
     private LocalDate dateOfBirth;
 
+    @Size(max = 255, message = "targetRole must be at most 255 characters")
     @Schema(example = "Senior Backend Engineer")
     private String targetRole;
 
+    @Size(max = 255, message = "industry must be at most 255 characters")
     @Schema(example = "Technology")
     private String industry;
 
     @Schema(example = "senior")
     private String experienceLevel;
 
+    @Size(max = 255, message = "currentJobTitle must be at most 255 characters")
     @Schema(example = "Backend Engineer at Aramco")
     private String currentJobTitle;
 
+    @Min(value = 0, message = "yearsOfExperience must be 0 or greater")
     @Schema(example = "5")
     private Integer yearsOfExperience;
 
