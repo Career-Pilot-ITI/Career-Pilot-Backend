@@ -15,10 +15,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class FileUploadServiceImpl implements IFileUploadService {
+
+    private static final Set<String> ALLOWED_TYPES = Set.of("avatars", "resumes", "cvs");
+    private static final Map<String, Set<String>> ALLOWED_EXTENSIONS = Map.of(
+            "avatars", Set.of(".png", ".jpg", ".jpeg"),
+            "resumes", Set.of(".pdf", ".docx", ".doc"),
+            "cvs", Set.of(".pdf", ".docx", ".doc")
+    );
 
     private final IUserFileRepository userFileRepository;
     private final IUserRepository userRepository;
@@ -37,11 +47,18 @@ public class FileUploadServiceImpl implements IFileUploadService {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("File is empty");
         }
+        if (type == null || !ALLOWED_TYPES.contains(type)) {
+            throw new IllegalArgumentException("Invalid file type '" + type + "'. Allowed: " + ALLOWED_TYPES);
+        }
 
         String originalName = file.getOriginalFilename();
         String extension = "";
         if (originalName != null && originalName.contains(".")) {
-            extension = originalName.substring(originalName.lastIndexOf("."));
+            extension = originalName.substring(originalName.lastIndexOf(".")).toLowerCase(Locale.ROOT);
+        }
+        if (!ALLOWED_EXTENSIONS.get(type).contains(extension)) {
+            throw new IllegalArgumentException(
+                    "Unsupported file format for '" + type + "'. Allowed: " + ALLOWED_EXTENSIONS.get(type));
         }
 
         String filename = UUID.randomUUID() + extension;
