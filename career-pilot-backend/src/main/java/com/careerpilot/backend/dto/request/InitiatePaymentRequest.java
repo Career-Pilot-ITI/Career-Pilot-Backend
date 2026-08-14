@@ -3,9 +3,11 @@ package com.careerpilot.backend.dto.request;
 import com.careerpilot.backend.entity.ENUMs.PaymentProvider;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 @Data
@@ -15,10 +17,12 @@ public class InitiatePaymentRequest {
     @Schema(description = "Purchase amount in major currency units (not cents)", example = "10.00")
     @NotNull
     @DecimalMin(value = "0.01")
+    @DecimalMax(value = "999999999.99", message = "amount is too large")
     private Double amount;
 
     @Schema(description = "ISO currency code", example = "EGP")
     @NotBlank
+    @Pattern(regexp = "^[A-Z]{3}$", message = "Currency must be a 3-letter ISO code, e.g. EGP or USD")
     private String currency;
 
     @Schema(description = "Payment method to use", example = "card", allowableValues = {"card", "wallet", "meeza"})

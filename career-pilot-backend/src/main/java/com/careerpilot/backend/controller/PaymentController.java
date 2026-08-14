@@ -16,10 +16,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -27,6 +31,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/payments")
 @RequiredArgsConstructor
+@Validated
 @Tag(name = "Payments", description = "Paymob checkout initiation, webhook confirmation, and transaction history")
 public class PaymentController {
 
@@ -92,7 +97,10 @@ public class PaymentController {
     })
     public Page<PaymentTransactionResponse> history(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            Pageable pageable) {
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "page must be 0 or greater") Integer page,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = "size must be at least 1") @Max(value = 100, message = "size must be at most 100") Integer size,
+            @RequestParam(defaultValue = "id") String sort) {
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(sort));
         return paymentTransactionService.findByUser(userDetails.getUser().getId(), pageable)
                 .map(PaymentTransactionResponse::from);
     }
