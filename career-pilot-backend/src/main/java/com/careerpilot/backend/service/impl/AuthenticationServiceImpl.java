@@ -132,10 +132,10 @@ public class AuthenticationServiceImpl implements IAuthentication {
   @Override
   public LoginResponse refresh(String refreshToken) {
     String username = refreshTokenService.validateAndRotate(refreshToken)
-        .orElseThrow(() -> new RuntimeException("Invalid or expired refresh token"));
+        .orElseThrow(() -> new AuthException.InvalidRefreshTokenException("Invalid or expired refresh token"));
 
     User user = iUserRepository.findByUsername(username)
-        .orElseThrow(() -> new RuntimeException("User not found"));
+        .orElseThrow(() -> new AuthException.InvalidRefreshTokenException("Invalid or expired refresh token"));
 
     CustomUserDetails userDetails = new CustomUserDetails(user);
     String newAccessToken = jwtService.generateToken(userDetails);

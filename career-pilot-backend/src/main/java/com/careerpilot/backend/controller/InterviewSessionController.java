@@ -20,6 +20,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -38,6 +41,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/interviews/sessions")
 @RequiredArgsConstructor
+@Validated
 @Tag(name = "Interview Sessions", description = "Interview lifecycle: start → answer loop → feedback")
 @SecurityRequirement(name = "bearerAuth")
 public class InterviewSessionController {
@@ -273,7 +277,8 @@ public class InterviewSessionController {
   @Operation(summary = "Get the coin cost of an interview session",
           description = "Returns the coin cost based on session duration. Rate: 1 coin per 2 minutes.")
   public Map<String, Object> sessionPrice(
-          @RequestParam(required = false, defaultValue = "5") int durationMinutes) {
+          @RequestParam @Min(value = 1, message = "durationMinutes must be at least 1")
+          @Max(value = 120, message = "durationMinutes must be at most 120") int durationMinutes) {
     int cost = Math.max(1, durationMinutes / 2);
     return Map.of("coinCost", cost, "durationMinutes", durationMinutes, "rate", "1 coin per 2 minutes");
   }

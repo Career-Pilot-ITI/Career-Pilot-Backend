@@ -63,7 +63,13 @@ public class SubscriptionController {
             description = "Takes effect at the end of the current billing cycle. No immediate change, no clawback of used quota.")
     public void downgrade(@Valid @RequestBody DowngradeSubscriptionRequest request,
                           @AuthenticationPrincipal CustomUserDetails userDetails) {
-        SubscriptionTier target = SubscriptionTier.valueOf(request.getTier());
+        SubscriptionTier target;
+        try {
+            target = SubscriptionTier.valueOf(request.getTier());
+        } catch (IllegalArgumentException e) {
+            throw new SubscriptionException.InvalidTierException(
+                    "Invalid tier: " + request.getTier() + ". Allowed: FREE, PLUS, PRO");
+        }
         subscriptionService.downgrade(userDetails.getUser().getId(), target);
     }
 
