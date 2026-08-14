@@ -6,6 +6,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.data.mapping.PropertyReferenceException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -74,6 +77,28 @@ public class ValidationExceptionHandler {
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
     return build("Malformed or missing request body");
+  }
+
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException ex) {
+    return build("Invalid resource path: " + ex.getResourcePath());
+  }
+
+  @ExceptionHandler(PropertyReferenceException.class)
+  public ResponseEntity<ApiResponse<Void>> handlePropertyReference(PropertyReferenceException ex) {
+    return build("Invalid sort property '" + ex.getPropertyName() + "' for type " + ex.getType());
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+    return new ResponseEntity<>(
+        ApiResponse.error("Unsupported Content-Type. Supported: " + ex.getSupportedMediaTypes()),
+        HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+  }
+
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+    return build(ex.getMessage() != null ? ex.getMessage() : "Invalid request argument");
   }
 
   private String targetType(MethodArgumentTypeMismatchException ex) {
