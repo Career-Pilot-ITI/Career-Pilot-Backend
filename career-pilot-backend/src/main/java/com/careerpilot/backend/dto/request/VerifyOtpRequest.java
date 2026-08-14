@@ -8,7 +8,7 @@ import lombok.Data;
 @Data
 public class VerifyOtpRequest {
     @NotBlank(message = "Phone number is required")
-    @Pattern(regexp = "^\\+?[1-9]\\d{7,14}$", message = "Phone number must be in E.164 format, e.g. +201234567890")
+    @Pattern(regexp = "^\\+?201[0-9]{9}$", message = "Invalid Egyptian mobile number. Expected format: +201XXXXXXXXX (country 20 + 1 + 9 digits)")
     @Schema(example = "+201234567890")
     private String phoneNumber;
 
