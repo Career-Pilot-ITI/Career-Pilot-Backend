@@ -88,7 +88,7 @@ public class InterviewSessionService implements IInterviewSessionService {
 
     Track track = resolveTrack(request, userId);
     if (track == null) {
-      throw new RuntimeException(
+      throw new ResourceNotFoundException(
           request.getTrackId() != null
               ? "Track not found with id: " + request.getTrackId()
               : "Could not resolve a track from workspace " + request.getWorkspaceId()
