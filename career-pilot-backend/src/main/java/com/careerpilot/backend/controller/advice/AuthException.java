@@ -67,4 +67,10 @@ public class AuthException {
       super(message);
     }
   }
+
+  public static class InvalidRefreshTokenException extends RuntimeException {
+    public InvalidRefreshTokenException(String message) {
+      super(message);
+    }
+  }
 }

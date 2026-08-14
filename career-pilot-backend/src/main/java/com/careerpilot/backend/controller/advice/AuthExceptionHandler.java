@@ -75,6 +75,11 @@ public class AuthExceptionHandler {
     return buildResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
   }
 
+  @ExceptionHandler(AuthException.InvalidRefreshTokenException.class)
+  public ResponseEntity<ApiResponse<Void>> handleInvalidRefreshToken(AuthException.InvalidRefreshTokenException ex) {
+    return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+  }
+
   private ResponseEntity<ApiResponse<Void>> buildResponse(String message, HttpStatus status) {
     return new ResponseEntity<>(ApiResponse.error(message), status);
   }
