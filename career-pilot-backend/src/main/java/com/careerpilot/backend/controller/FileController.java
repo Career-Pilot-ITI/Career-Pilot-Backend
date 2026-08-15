@@ -24,16 +24,17 @@ import org.springframework.web.multipart.MultipartFile;
 @Tag(name = "Files", description = "File upload for avatars, resumes, and CVs")
 public class FileController {
 
-    private final IFileUploadService fileUploadService;
+  private final IFileUploadService fileUploadService;
 
-    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload a file", description = "Upload an avatar, resume, or CV file. Returns the file ID and URL to use in profile update.")
-    public ResponseEntity<UserFileResponse> upload(
-            @RequestPart("file") MultipartFile file,
-            @RequestPart("type") @Parameter(description = "File type", schema = @Schema(allowableValues = {"avatars", "resumes", "cvs"})) String type) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        CustomUserDetails userDetails = (CustomUserDetails) auth.getPrincipal();
-        UserFileResponse response = fileUploadService.upload(file, type, userDetails.getUser().getId());
-        return ResponseEntity.ok(response);
-    }
+  @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @Operation(summary = "Upload a file", description = "Upload an avatar, resume, or CV file. Returns the file ID and URL to use in profile update.")
+  public ResponseEntity<UserFileResponse> upload(
+      @RequestPart("file") MultipartFile file,
+      @RequestPart("type") @Parameter(description = "File type", schema = @Schema(allowableValues = { "avatars",
+          "resumes", "cvs", "audio" })) String type) {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    CustomUserDetails userDetails = (CustomUserDetails) auth.getPrincipal();
+    UserFileResponse response = fileUploadService.upload(file, type, userDetails.getUser().getId());
+    return ResponseEntity.ok(response);
+  }
 }
