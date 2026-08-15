@@ -23,12 +23,12 @@ import java.util.UUID;
 @Service
 public class FileUploadServiceImpl implements IFileUploadService {
 
-    private static final Set<String> ALLOWED_TYPES = Set.of("avatars", "resumes", "cvs","audio");
+    private static final Set<String> ALLOWED_TYPES = Set.of("avatars", "resumes", "cvs","audios");
     private static final Map<String, Set<String>> ALLOWED_EXTENSIONS = Map.of(
             "avatars", Set.of(".png", ".jpg", ".jpeg"),
             "resumes", Set.of(".pdf", ".docx", ".doc"),
             "cvs", Set.of(".pdf", ".docx", ".doc"),
-            "audio", Set.of(".mp3", ".wav", ".m4a", ".ogg")
+            "audios", Set.of(".mp3", ".wav", ".m4a", ".ogg", ".mp4", ".3gp")
     );
 
     private final IUserFileRepository userFileRepository;
