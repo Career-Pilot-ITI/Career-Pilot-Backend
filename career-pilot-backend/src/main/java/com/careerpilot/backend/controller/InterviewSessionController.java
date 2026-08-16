@@ -278,7 +278,7 @@ public class InterviewSessionController {
           description = "Returns the coin cost based on session duration. Rate: 1 coin per 2 minutes.")
   public Map<String, Object> sessionPrice(
           @RequestParam @Min(value = 1, message = "durationMinutes must be at least 1")
-          @Max(value = 120, message = "durationMinutes must be at most 120") int durationMinutes) {
+          @Max(value = 120, message = "durationMinutes must be at most 120") int durationMinutes)  {
     int cost = Math.max(1, durationMinutes / 2);
     return Map.of("coinCost", cost, "durationMinutes", durationMinutes, "rate", "1 coin per 2 minutes");
   }
