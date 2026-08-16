@@ -102,14 +102,14 @@ paymob:
     card: ${PAYMOB_INTEGRATION_ID_CARD:0}
 coin-packs:
   prices:
-    100: 20.0
-    500: 90.0
-    1000: 170.0
+    50: 149.0
+    120: 299.0
+    300: 599.0
 
 tier-pricing:
   prices:
-    PLUS: 199.0
-    PRO: 349.0
+    PLUS: 349.0
+    PRO: 599.0
 security:
   jwt:
     secret-key: ${JWT_SECRET}
@@ -147,18 +147,23 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   session:
     minutes-per-coin: ${MINUTES_PER_COIN:2}
+  plans:
+    coins:
+      FREE: 20
+      PLUS: 80
+      PRO: 160
   embedding:
     sweep-on-startup: ${EMBED_SWEEP_ON_STARTUP:true}
   job-parse:
     coin-cost: ${JOB_PARSE_COIN_COST:1}
   ats-score:
-    coin-cost: ${ATS_SCORE_COIN_COST:2}
+    coin-cost: ${ATS_SCORE_COIN_COST:5}
   cv-optimize:
-    coin-cost: ${CV_OPTIMIZE_COIN_COST:5}
+    coin-cost: ${CV_OPTIMIZE_COIN_COST:15}
     max-output-factor: ${CV_OPTIMIZE_MAX_OUTPUT_FACTOR:1.5}
     max-anchor-factor: ${CV_OPTIMIZE_MAX_ANCHOR_FACTOR:6}
   cover-letter:
-    coin-cost: ${COVER_LETTER_COIN_COST:2}
+    coin-cost: ${COVER_LETTER_COIN_COST:5}
     plus-search-max-chars: ${COVER_LETTER_PLUS_SEARCH_MAX_CHARS:1500}
   upload:
     path: ${UPLOAD_PATH:./uploads}
