@@ -1,8 +1,11 @@
 package com.careerpilot.backend.service.impl;
 
+import com.careerpilot.backend.config.PlanCoinsConfig;
+import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
 import com.careerpilot.backend.entity.ENUMs.SubscriptionTier;
 import com.careerpilot.backend.entity.Subscription;
 import com.careerpilot.backend.repository.ISubscriptionRepository;
+import com.careerpilot.backend.service.ICoinWalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,6 +21,8 @@ import java.util.List;
 public class SubscriptionRenewalSweepJob {
 
     private final ISubscriptionRepository subscriptionRepository;
+    private final ICoinWalletService coinWalletService;
+    private final PlanCoinsConfig planCoinsConfig;
 
     @Scheduled(cron = "0 0 * * * *")
 //    @Scheduled(fixedRate = 30000)
@@ -45,6 +50,12 @@ public class SubscriptionRenewalSweepJob {
             sub.setCancelledAt(null);
             sub.setRenewalDate(resolvedTier == SubscriptionTier.FREE ? null : LocalDateTime.now().plusMonths(1));
             sub.setUpdatedAt(LocalDateTime.now());
+
+            if (resolvedTier == SubscriptionTier.FREE) {
+                int seededCoins = planCoinsConfig.getCoins().getOrDefault(SubscriptionTier.FREE.name(), 0);
+                coinWalletService.credit(sub.getUser().getId(), seededCoins,
+                        CoinLedgerReason.PLAN_GRANT, "DOWNGRADE_FREE");
+            }
         }
 
         subscriptionRepository.saveAll(due);

@@ -8,5 +8,6 @@ public enum CoinLedgerReason {
     CV_OPTIMIZE,
     COVER_LETTER,
     REFUND,
+    PLAN_GRANT,
     ADMIN_ADJUSTMENT
 }

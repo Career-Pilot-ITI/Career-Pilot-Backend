@@ -1,6 +1,7 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.PaymentException;
+import com.careerpilot.backend.config.PlanCoinsConfig;
 import com.careerpilot.backend.controller.response.PaymentInitiationResponse;
 import com.careerpilot.backend.dto.payment.PaymentEventResult;
 import com.careerpilot.backend.dto.payment.PaymentInitiationRequest;
@@ -28,6 +29,7 @@ public class PaymentServiceImpl implements IPaymentService {
     private final IPaymentTransactionService transactionService;
     private final ICoinWalletService coinWalletService;
     private final ISubscriptionService subscriptionService;
+    private final PlanCoinsConfig planCoinsConfig;
 
     @Override
     @Transactional
@@ -77,6 +79,9 @@ public class PaymentServiceImpl implements IPaymentService {
             } else if (tx.getTierPurchased() != null) {
                 SubscriptionTier tier = SubscriptionTier.valueOf(tx.getTierPurchased());
                 subscriptionService.upgrade(tx.getUser(), tier);
+                int seededCoins = planCoinsConfig.getCoins().getOrDefault(tier.name(), 0);
+                coinWalletService.credit(tx.getUser().getId(), seededCoins,
+                        CoinLedgerReason.PLAN_GRANT, tx.getMerchantOrderId());
             }
         } else {
             transactionService.markFailed(tx, event.getProviderTransactionId(), event.getRawPayload(), event.getFailureReason());

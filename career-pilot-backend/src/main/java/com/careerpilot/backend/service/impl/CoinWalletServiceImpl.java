@@ -1,6 +1,7 @@
 package com.careerpilot.backend.service.impl;
 
 import com.careerpilot.backend.controller.advice.WalletException;
+import com.careerpilot.backend.config.PlanCoinsConfig;
 import com.careerpilot.backend.entity.CoinLedgerEntry;
 import com.careerpilot.backend.entity.CoinWallet;
 import com.careerpilot.backend.entity.ENUMs.CoinLedgerReason;
@@ -20,14 +21,18 @@ public class CoinWalletServiceImpl implements ICoinWalletService {
 
   private final ICoinWalletRepository walletRepository;
   private final ICoinLedgerRepository ledgerRepository;
+  private final PlanCoinsConfig planCoinsConfig;
 
   @Override
   @Transactional
   public CoinWallet createWalletForUser(User user) {
+    int seedCoins = planCoinsConfig.getCoins().getOrDefault("FREE", 0);
     CoinWallet wallet = new CoinWallet();
     wallet.setUser(user);
-    wallet.setBalance(0);
-    return walletRepository.save(wallet);
+    wallet.setBalance(seedCoins);
+    wallet = walletRepository.save(wallet);
+    writeLedgerEntry(wallet, seedCoins, CoinLedgerReason.PLAN_GRANT, "SIGNUP_FREE");
+    return wallet;
   }
 
   @Override
