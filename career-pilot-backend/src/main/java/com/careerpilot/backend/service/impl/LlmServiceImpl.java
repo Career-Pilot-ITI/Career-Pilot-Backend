@@ -210,6 +210,14 @@ public class LlmServiceImpl implements ILlmService {
 
   @Override
   public CvAnalysis analyzeCv(String cvText) {
+    // Bound the prompt: a huge CV makes the free-tier models echo/repeat the
+    // input (e.g. hundreds of "seeded" skills) until the response is truncated
+    // and the JSON parse fails, silently producing an empty CvAnalysis.
+    String trimmed = cvText == null ? "" : cvText.strip();
+    if (trimmed.length() > 12000) {
+      trimmed = trimmed.substring(0, 12000);
+    }
+
     String prompt = """
         Extract structured information from this CV text.
 
@@ -218,20 +226,36 @@ public class LlmServiceImpl implements ILlmService {
         Return ONLY raw JSON with no markdown formatting.
         {"skills": [], "yearsOfExperience": 0, "targetRole": "", "educationLevel": "", "displayName": "", "currentJobTitle": ""}
         """
-        .formatted(cvText);
+        .formatted(trimmed);
 
-    String response = chatClient.prompt()
-        .system(s -> s.text("""
+    String system = """
             You are an HR expert specializing in CV parsing and skills assessment.
             Extract structured information from unstructured CV text accurately.
             If a field cannot be determined, use reasonable defaults or empty lists.
+            List at most 30 skills.
             Any [REDACTED:...] placeholder in the input is protected PII — preserve it verbatim in anything you output; never fill it in, guess it, or remove it.
-            """))
-        .user(prompt)
-        .call()
-        .content();
+            """;
 
+    String response = null;
     try {
+      response = chatClient.prompt()
+          .system(s -> s.text(system))
+          .user(prompt)
+          .call()
+          .content();
+
+      if (response == null || response.isBlank()) {
+        log.warn("LLM returned empty response for CV analysis — retrying once");
+        response = chatClient.prompt()
+            .system(s -> s.text(system))
+            .user(prompt)
+            .call()
+            .content();
+      }
+      if (response == null || response.isBlank()) {
+        throw new IllegalStateException("LLM returned an empty response while analyzing the CV");
+      }
+
       return objectMapper.readValue(stripMarkdown(response), CvAnalysis.class);
     } catch (Exception e) {
       log.warn("Failed to parse CV analysis response: {}", response, e);
@@ -460,11 +484,25 @@ public class LlmServiceImpl implements ILlmService {
         """.formatted(jobCtx, skillCtx, sectionName, sectionContent);
 
     try {
+      // Retry once when the model returns empty/blank content — common with
+      // free-tier endpoints under transient load — before declaring a failure.
       String response = chatClient.prompt()
           .system("You are a professional ATS optimizer. Return only the requested JSON for the section.")
           .user(prompt)
           .call()
           .content();
+      if (response == null || response.isBlank()) {
+        log.warn("LLM returned empty response for CV section '{}' — retrying once", sectionName);
+        response = chatClient.prompt()
+            .system("You are a professional ATS optimizer. Return only the requested JSON for the section.")
+            .user(prompt)
+            .call()
+            .content();
+      }
+      if (response == null || response.isBlank()) {
+        throw new IllegalStateException(
+            "LLM returned an empty response while optimizing CV section: " + sectionName);
+      }
 
       // Read response into a temporary holder
       CvSection section = objectMapper.readValue(
@@ -473,15 +511,19 @@ public class LlmServiceImpl implements ILlmService {
       );
 
       // Validate improvements
-      List<CvSectionImprovement> validatedImprovements = section.improvements().stream()
+      String normalizedContent = normalizeCv(sectionContent);
+      List<CvSectionImprovement> validatedImprovements = section.improvements() == null ? List.of()
+          : section.improvements().stream()
           .filter(imp -> {
             String original = imp.original() == null ? "" : imp.original().trim();
             if (original.isEmpty()) {
               return false;
             }
-            // 1. Must exist verbatim in sectionContent
-            if (!sectionContent.contains(original)) {
-              log.warn("Skipping improvement - original anchor not found verbatim in CV section: '{}'", original);
+            // 1. Must exist in sectionContent. The LLM may echo the anchor
+            //    with different whitespace/newlines than the whitespace-normalized
+            //    section content, so compare both sides normalized.
+            if (!normalizedContent.contains(normalizeCv(original))) {
+              log.warn("Skipping improvement - original anchor not found in normalized CV section: '{}'", original);
               return false;
             }
             // 2. Protect [REDACTED:...] placeholders
@@ -496,7 +538,10 @@ public class LlmServiceImpl implements ILlmService {
       return new CvSection(section.name() != null ? section.name() : sectionName, section.score(), validatedImprovements);
     } catch (Exception e) {
       log.warn("Failed to optimize CV section '{}': {}", sectionName, e.getMessage());
-      return new CvSection(sectionName, 100, List.of());
+      // Fail loudly instead of silently reporting a fake score-100 section:
+      // a dead/free-tier endpoint must surface as a failed job, not fake success.
+      throw new IllegalStateException(
+          "Failed to optimize CV section '" + sectionName + "': " + e.getMessage(), e);
     }
   }
 

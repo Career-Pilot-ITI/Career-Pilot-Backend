@@ -162,6 +162,7 @@ app:
     coin-cost: ${CV_OPTIMIZE_COIN_COST:15}
     max-output-factor: ${CV_OPTIMIZE_MAX_OUTPUT_FACTOR:1.5}
     max-anchor-factor: ${CV_OPTIMIZE_MAX_ANCHOR_FACTOR:6}
+    max-parallel-sections: ${CV_OPTIMIZE_MAX_PARALLEL_SECTIONS:2}
   cover-letter:
     coin-cost: ${COVER_LETTER_COIN_COST:5}
     plus-search-max-chars: ${COVER_LETTER_PLUS_SEARCH_MAX_CHARS:1500}

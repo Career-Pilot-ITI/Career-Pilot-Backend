@@ -40,6 +40,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -74,6 +75,8 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
 
   private final WebSearchService webSearchService;
 
+  private final TransactionTemplate transactionTemplate;
+
   @Value("${app.ats-score.coin-cost:2}")
   private int atsScoreCoinCost;
 
@@ -84,20 +87,22 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
   private int coverLetterCoinCost;
 
   @Override
-  @Transactional
   public AtsScoreResponse scoreCv(Long workspaceId, Long userId) {
     JobWorkspace workspace = requireWorkspace(workspaceId, userId);
     String cvText = latestCvText(userId);
-    int coinCost = requireEntitled(userId, atsScoreCoinCost, CoinLedgerReason.ATS_SCORE);
 
+    // LLM call happens OUTSIDE any DB transaction so the connection (and the
+    // wallet lock) is not held for the duration of a slow model call.
     AtsScore score = llmService.scoreCv(cvText, workspace.getJob());
 
-    LocalDateTime updatedAt = LocalDateTime.now();
-    workspace.setCvScore(score.overallScore());
-    workspace.setCvScoreUpdatedAt(updatedAt);
-    jobWorkspaceRepository.save(workspace);
-
-    return AtsScoreResponse.from(score, coinCost, updatedAt);
+    return transactionTemplate.execute(status -> {
+      int coinCost = requireEntitled(userId, atsScoreCoinCost, CoinLedgerReason.ATS_SCORE);
+      LocalDateTime updatedAt = LocalDateTime.now();
+      workspace.setCvScore(score.overallScore());
+      workspace.setCvScoreUpdatedAt(updatedAt);
+      jobWorkspaceRepository.save(workspace);
+      return AtsScoreResponse.from(score, coinCost, updatedAt);
+    });
   }
 
   @Override
@@ -138,15 +143,15 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
   }
 
   @Override
-  @Transactional
   public CoverLetterResponse generateCoverLetter(Long workspaceId, Long userId) {
     JobWorkspace workspace = requireWorkspace(workspaceId, userId);
     String cvText = latestCvText(userId);
-    int coinCost = requireEntitled(userId, coverLetterCoinCost, CoinLedgerReason.COVER_LETTER);
 
     UserProfile profile = userProfileRepository.findByUserId(userId).orElse(null);
     SubscriptionTier tier = resolveTier(userId);
 
+    // All LLM work (cover letter + company research) runs OUTSIDE any DB
+    // transaction so slow model calls don't hold a DB connection open.
     CoverLetterDraft draft;
     if (tier == SubscriptionTier.FREE) {
       String research = serviceSideCompanyResearch(workspace);
@@ -155,10 +160,12 @@ public class JobWorkspaceAiServiceImpl implements IJobWorkspaceAiService {
       draft = coverLetterAgentService.researchAndWrite(tier, workspace.getJob(), cvText, profile);
     }
 
-    workspace.setCoverLetterText(draft.coverLetter());
-    jobWorkspaceRepository.save(workspace);
-
-    return CoverLetterResponse.from(draft, coinCost);
+    return transactionTemplate.execute(status -> {
+      int coinCost = requireEntitled(userId, coverLetterCoinCost, CoinLedgerReason.COVER_LETTER);
+      workspace.setCoverLetterText(draft.coverLetter());
+      jobWorkspaceRepository.save(workspace);
+      return CoverLetterResponse.from(draft, coinCost);
+    });
   }
 
   private JobWorkspace requireWorkspace(Long workspaceId, Long userId) {

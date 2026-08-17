@@ -158,7 +158,6 @@ public class UserProfileServiceImpl implements IUserProfileService {
   }
 
   @Override
-  @Transactional
   public UserProfileResponse analyzeCv(Long userId, MultipartFile file) {
     UserFileResponse fileResponse = fileUploadService.upload(file, "cvs", userId);
 

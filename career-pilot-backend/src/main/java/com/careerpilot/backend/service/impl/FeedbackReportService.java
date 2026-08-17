@@ -52,7 +52,6 @@ public class FeedbackReportService implements IFeedbackReportService {
      * There is no separate "complete session" endpoint.
      */
     @Override
-    @Transactional
     public FeedbackReportResponse getFeedbackReport(Long sessionId, Long userId) {
         log.info("GET /feedback called for session: {}, user: {}", sessionId, userId);
 

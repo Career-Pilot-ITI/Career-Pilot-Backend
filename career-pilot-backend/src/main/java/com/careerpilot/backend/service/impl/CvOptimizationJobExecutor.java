@@ -39,6 +39,19 @@ public class CvOptimizationJobExecutor {
     private final ObjectMapper objectMapper;
     private final TaskExecutor taskExecutor;
 
+    // Free-tier LLM endpoints rate-limit bursts of concurrent calls. Bounding
+    // the section fan-out avoids a wall of simultaneous requests timing out and
+    // silently producing empty score-0 sections (the observed production bug).
+    private java.util.concurrent.Semaphore sectionPermits;
+
+    @org.springframework.beans.factory.annotation.Value("${app.cv-optimize.max-parallel-sections:2}")
+    private int maxParallelSections;
+
+    @jakarta.annotation.PostConstruct
+    void initSectionPermits() {
+        sectionPermits = new java.util.concurrent.Semaphore(maxParallelSections);
+    }
+
     @Async
     public void executeOptimization(Long jobId, Long userId, String rawCvText, JobListing job, int coinCost) {
         log.info("Starting CV optimization job ID: {} for user: {}", jobId, userId);
@@ -136,18 +149,24 @@ public class CvOptimizationJobExecutor {
             Long userId, List<CvSectionDto> sections, JobListing job, List<UserSkill> skills) {
         List<CompletableFuture<CvSection>> futures = sections.stream()
             .map(section -> CompletableFuture.supplyAsync(() -> {
+                // Acquire before the LLM call so only N sections hit the
+                // endpoint at once; release even when the call fails.
+                try {
+                    sectionPermits.acquire();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting for section slot", e);
+                }
                 try {
                     return llmService.optimizeSection(userId, section.name(), section.content(), job, skills);
-                } catch (Exception e) {
-                    // One broken section must not sink the whole job.
-                    log.error("Failed to optimize CV section '{}': {}", section.name(), e.getMessage());
-                    return new CvSection(section.name(), 0, List.of());
+                } finally {
+                    sectionPermits.release();
                 }
             }, taskExecutor))
             .toList();
 
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
+        // Fail loudly (propagates to the job FAILED + refund path) instead of
+        // silently fabricating score-0 sections when the LLM is down or the
         return futures.stream()
             .map(CompletableFuture::join)
             .toList();
